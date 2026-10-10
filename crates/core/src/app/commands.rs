@@ -50,6 +50,8 @@ pub struct CommandRequest {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
+    #[error(transparent)]
+    Telegram(#[from] crate::notifications::Error),
     #[error("invalid_request")]
     InvalidRequest,
     #[error("invalid_manual_duration")]

@@ -46,7 +46,15 @@
             "request_failed": "Request failed. Try again.",
             "invalid_channel": "Enter a Twitch channel name or a direct twitch.tv channel URL.",
             "invalid_manual_duration": "Enter a whole number of minutes from 1 to 1440, or leave the timer empty.",
-            "twitch_login_required": "Connect your Twitch account before selecting a channel."
+            "twitch_login_required": "Connect your Twitch account before selecting a channel.",
+            "telegram_invalid": "Enter a valid bot token and numeric chat ID.",
+            "telegram_storage": "Telegram settings could not be read or saved. Check telegram.json in the data folder; the original file was preserved.",
+            "telegram_disabled": "Enable and save Telegram before sending a test.",
+            "telegram_busy": "A Telegram message is already being sent. Try again shortly.",
+            "telegram_token": "Invalid bot token.",
+            "telegram_chat": "Could not send to this chat. Check its ID and start a conversation with your bot.",
+            "telegram_failed": "Could not send the Telegram message. Delivery may be unknown; check your chat before retrying.",
+            "telegram_cancelled": "Telegram delivery was cancelled."
         },
         "status": {
             "gathering": "Gathering channels...",
@@ -352,7 +360,20 @@
             "profile_equipped_badge": "{name} (equipped)",
             "profile_badges_unavailable": "Full badge collection unavailable.",
             "profile_unavailable": "Profile details are currently unavailable.",
-            "profile_badges_empty": "No badges available."
+            "profile_badges_empty": "No badges available.",
+            "notifications": "Notifications",
+            "telegram_enabled": "Notify me when a reward is claimed",
+            "telegram_bot_token": "Bot token",
+            "telegram_chat_id": "Chat ID",
+            "telegram_token_saved": "Token saved",
+            "telegram_save": "Save",
+            "telegram_retry": "Try again",
+            "telegram_saved": "Telegram settings saved.",
+            "telegram_test": "Send test",
+            "telegram_test_sent": "Test message sent.",
+            "telegram_remove": "Remove configuration",
+            "telegram_reload": "Reload saved settings",
+            "telegram_help": "Create a bot with @BotFather in Telegram, then open your new bot and send /start. Enter its token and your numeric chat ID. Save, then send a test. Leave the token blank to keep the saved one. Setup instructions are in the README."
         },
         "backend": {
             "proxy_empty": "Proxy URL is empty.",
@@ -361,7 +382,8 @@
             "session_storage": "The saved Twitch session could not be removed. Check the data directory permissions.",
             "twitch_error": "Twitch operation failed: {error}. Retrying...",
             "worker_failed": "The mining task stopped unexpectedly. Shutting down safely.",
-            "drop_claimed": "Drop claimed"
+            "drop_claimed": "Drop claimed",
+            "telegram_delivery_failed": "Telegram notification could not be sent. Mining continues."
         },
         "desktop": {
             "tab": "Desktop",

@@ -1021,8 +1021,14 @@ impl Mining {
                     event.drop_id = Some(drop.id.clone());
                     event.campaign_id = campaign_id;
                     self.app.record_activity(event).await;
-                    self.app
-                        .notify(message("gui.backend.drop_claimed", &[]), drop.name.clone());
+                }
+                if let Some(campaign) = self
+                    .campaigns
+                    .iter()
+                    .find(|c| c.drops.iter().any(|d| d.id == id))
+                    && let Some(drop) = campaign.drops.iter().find(|d| d.id == id)
+                {
+                    self.app.notify_claimed(self.client.user_id, campaign, drop);
                 }
                 self.claim_retry.remove(&id);
                 self.recover_claims(&HashMap::new()).await?;

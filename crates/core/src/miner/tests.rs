@@ -2160,6 +2160,7 @@ async fn already_claimed_automatic_badge_is_recorded_once_and_does_not_block_nex
 async fn inventory_imports_confirmed_badges_without_claiming_or_resurrecting_cleared_history() {
     let server = MockServer::start().await;
     let (dir, mut miner, _intent, mut pool) = miner(&server).await;
+    let mut notifications = miner.app.notifications.subscribe();
     let awarded_at = Utc::now() - chrono::Duration::minutes(1);
     let awards = HashMap::from([
         ("benefit-one".into(), awarded_at),
@@ -2254,6 +2255,7 @@ async fn inventory_imports_confirmed_badges_without_claiming_or_resurrecting_cle
         "inventory imports must not make claim RPCs"
     );
     assert!(miner.journal.lock().await.pending(42).is_empty());
+    assert!(notifications.try_recv().is_err());
     pool.close().await;
 }
 
@@ -2266,6 +2268,7 @@ async fn ignored_and_unselected_earned_rewards_are_claimed_once_and_archived_dur
     })
     .await;
     let (dir, mut miner, _intent, mut pool) = miner(&server).await;
+    let mut notifications = miner.app.notifications.subscribe();
     let settings = Settings {
         drop_name_blacklist: vec!["reward".into()],
         ..Settings::default()
@@ -2276,6 +2279,12 @@ async fn ignored_and_unselected_earned_rewards_are_claimed_once_and_archived_dur
     miner.schedule(&settings).await;
     assert_eq!(miner.jobs.len(), 1);
     finish_job(&mut miner, &pool).await;
+    let notification = notifications
+        .try_recv()
+        .expect("durable claim notification");
+    let claim = notification.claim.expect("structured claim metadata");
+    assert_eq!(claim.account, 42);
+    assert_eq!(claim.drop_id, miner.campaigns[0].drops[0].id);
     assert!(miner.campaigns[0].drops[0].claimed);
     miner.publish(&settings).await.unwrap();
     assert!(miner.app.snapshot.read().await.wanted_items.is_empty());
@@ -2294,6 +2303,7 @@ async fn ignored_and_unselected_earned_rewards_are_claimed_once_and_archived_dur
     assert!(CampaignArchive::load(dir.path()).merge(vec![], Utc::now())[0].finished);
     miner.schedule(&settings).await;
     assert!(miner.jobs.is_empty());
+    assert!(notifications.try_recv().is_err());
     pool.close().await;
 }
 
@@ -2386,6 +2396,7 @@ async fn journal_must_be_durable_before_remote_claim_and_failed_claims_are_not_h
     )
     .await;
     let (dir, miner, _intent, mut pool) = miner(&server).await;
+    let mut notifications = miner.app.notifications.subscribe();
     let mut campaign = miner.campaigns[0].clone();
     campaign.drops[0].claim_id = Some("instance".into());
     let entry = PendingClaim::new(42, &campaign, &campaign.drops[0], &Settings::default());
@@ -2416,6 +2427,7 @@ async fn journal_must_be_durable_before_remote_claim_and_failed_claims_are_not_h
             .pending(42)
             .is_empty()
     );
+    assert!(notifications.try_recv().is_err());
     pool.close().await;
 }
 

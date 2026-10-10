@@ -26,6 +26,13 @@ pub struct Error {
 impl From<AppError> for Error {
     fn from(value: AppError) -> Self {
         let status = match value {
+            AppError::Telegram(error) => {
+                if error == twitch_drops_miner_core::notifications::Error::Conflict {
+                    409
+                } else {
+                    400
+                }
+            }
             AppError::ShuttingDown | AppError::LoginRequired | AppError::SettingsConflict => 409,
             AppError::InvalidRequest
             | AppError::InvalidSettings
@@ -62,6 +69,9 @@ pub enum Request {
     AuthStatus,
     Settings,
     SaveSettings(Value),
+    Telegram,
+    SaveTelegram(twitch_drops_miner_core::notifications::Update),
+    TestTelegram,
     SelectChannel(ChannelSelection),
     Games(GameQuery),
     History(HistoryQuery),
@@ -88,6 +98,9 @@ impl Request {
                     json!({"enabled":false,"authenticated":true,"translations":ENGLISH["gui"]["auth"]}),
                 );
             }
+            Self::Telegram => return Ok(json!(app.telegram.view())),
+            Self::SaveTelegram(update) => return Ok(json!(app.save_telegram(update).await?)),
+            Self::TestTelegram => app.test_telegram().await?,
             Self::Settings => return Ok(json!(app.snapshot.read().await.settings)),
             Self::SaveSettings(patch) => {
                 if patch.to_string().len() > 1024 * 1024 {
@@ -280,6 +293,15 @@ mod tests {
             request.run(app.clone()).await,
             Err(AppError::InvalidRequest)
         ));
+        let telegram = Request::Telegram.run(app.clone()).await.unwrap();
+        assert_eq!(telegram["token_configured"], false);
+        let update = serde_json::from_value(json!({"revision":telegram["revision"],"enabled":true,"chat_id":"42","token":"123:private_token"})).unwrap();
+        let saved = Request::SaveTelegram(update)
+            .run(app.clone())
+            .await
+            .unwrap();
+        assert_eq!(saved["token_configured"], true);
+        assert!(!saved.to_string().contains("private_token"));
         let auth = Request::AuthStatus.run(app.clone()).await.unwrap();
         assert_eq!(auth["authenticated"], true);
         app.shutdown.cancel();
