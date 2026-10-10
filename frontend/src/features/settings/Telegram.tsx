@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { request } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
-import { ActionResult, Button, Field, HelpButton, Input, Notice, useAction } from '../../shared/ui';
+import {
+  ActionResult,
+  Button,
+  Check,
+  Field,
+  HelpButton,
+  Input,
+  Notice,
+  useAction,
+} from '../../shared/ui';
 
 interface Configuration {
   enabled: boolean;
