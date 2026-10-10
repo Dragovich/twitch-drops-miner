@@ -110,6 +110,17 @@ own authorization page.
 | **Activity** | Find session events, warnings and errors; filter or follow new events. |
 | **Settings** | View your profile and badges; manage dashboard access, connection and maintenance. |
 
+### Telegram notifications
+
+In **Settings > Notifications**, save a bot token and numeric chat ID, then select **Send test**.
+Create a dedicated bot with [@BotFather](https://t.me/BotFather), open its chat and send `/start`.
+Your chat ID is `message.chat.id` in your bot's [getUpdates response](https://core.telegram.org/bots/api#getupdates).
+Keep the bot token private. Leave its field blank to keep a saved token.
+
+Alerts report successful claims; delivery is best effort. Disable Telegram to stop alerts,
+or **Remove configuration** to clear its credentials. The private configuration is in `data/telegram.json`
+(or the desktop data folder).
+
 ## Updating
 
 **Desktop:** use **Check for updates** in the tray menu or **Settings > Maintenance**.

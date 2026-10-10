@@ -301,6 +301,27 @@ embed it and run without a build tool/runtime companion. Production builds never
   correlation, timing/status and hashes; mark capture omissions. Keep public errors unchanged,
   and bound retry-body capture to one second without replacing retry/cancellation decisions.
 
+## Telegram notifications
+
+- Optional claimed-only Telegram notifications use the shared core notification channel and
+  an owned runtime worker, separate from Twitch work. Publish after successful durable claims;
+  never notify on estimates, imported history or cache clears. Browser/native notification
+  payloads stay unchanged. A bounded queue and account/drop deduplication make delivery best
+  effort; no persistent outbox or restart replay. Hourly Twitch renewal does not restart it.
+- `telegram.json` stores enabled/token/numeric chat ID separately from public settings. Use
+  atomic private writes and revision conflicts; unreadable files remain untouched with Telegram
+  disabled. Tokens are write-only, omitted from snapshots/IPC reads, logs and browser drafts.
+  Blank input retains the saved token; explicit Remove configuration clears it. Accepted saves
+  are owned and drained. Configuration changes and Twitch logout fence/cancel pending delivery.
+- The isolated Telegram client uses the configured proxy, fixed HTTPS API host, no redirects,
+  no Twitch headers/cookies, bounded messages/responses/timeouts and serialized paced sends.
+  Only explicit bounded 429 responses retry once; ambiguous delivery failures never replay.
+  Automatic messages wait cancellably behind a test; tests are single-flight. Failures cannot
+  stop mining or undo claims. Activity failures collapse; successful deliveries/tests recover them.
+- Settings > Notifications shares the same save/remove/test application methods through guarded
+  server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
+  additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+
 ## Authentication and storage
 
 - Original in-app device code only, Smart TV client identity, `twitch_oauth2` types/requests.
@@ -483,7 +504,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   CSV/JSON export, Since filter or separate history clear action. Clear all cache clears history
   and publishes the durable change to open dashboards; archives never recreate cleared rows.
 - History artwork is optional; retain old rows and use matching live benefits as display fallback.
-  No Telegram controls/API/credentials in responses and no server-dashboard installer/updater.
+  Telegram credentials never appear in responses; no server-dashboard installer/updater.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games
