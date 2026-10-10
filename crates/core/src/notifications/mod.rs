@@ -184,6 +184,12 @@ impl Telegram {
         self.state.lock().unwrap().epoch
     }
 
+    #[cfg(any(test, feature = "dashboard-fixture"))]
+    pub fn disable_for_fixture(&self) {
+        self.delivery.close();
+        self.cancel_pending();
+    }
+
     pub fn cancel_pending(&self) {
         let mut state = self.state.lock().unwrap();
         state.cancel.cancel();
@@ -256,6 +262,9 @@ impl Telegram {
         shutdown: &CancellationToken,
         test: bool,
     ) -> Result<(), Error> {
+        if self.delivery.is_closed() {
+            return Err(Error::Disabled);
+        }
         let (config, cancel) = {
             let state = self.state.lock().unwrap();
             if state.epoch != epoch {

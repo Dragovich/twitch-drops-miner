@@ -37,6 +37,7 @@ fn fixture_activity(lines: &[String]) -> Vec<crate::app::activity::ActivityEvent
 
 pub async fn create(directory: PathBuf) -> anyhow::Result<(Arc<App>, JoinHandle<()>)> {
     let (mut app, receiver) = App::open(directory, "")?;
+    app.telegram.disable_for_fixture();
     Arc::get_mut(&mut app).expect("new application").fixture = true;
     reset_state(&app).await?;
     let worker = tokio::spawn(commands(app.clone(), receiver));

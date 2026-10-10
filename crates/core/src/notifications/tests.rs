@@ -16,6 +16,31 @@ fn update(service: &Telegram) -> Update {
 }
 
 #[tokio::test]
+async fn offline_fixture_cannot_deliver_even_after_configuration_changes() {
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut service = Telegram::open(dir.path()).unwrap();
+    service.endpoint = server.uri();
+    service.disable_for_fixture();
+    service.save(update(&service)).unwrap();
+    for test in [true, false] {
+        assert_eq!(
+            service
+                .send(
+                    service.epoch(),
+                    "offline",
+                    "",
+                    &CancellationToken::new(),
+                    test
+                )
+                .await,
+            Err(Error::Disabled)
+        );
+    }
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn private_config_preserves_tokens_and_rejects_stale_or_invalid_updates() {
     let dir = tempfile::tempdir().unwrap();
     let (app, _) = Application::open(dir.path().into()).unwrap();
