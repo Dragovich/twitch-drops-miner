@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.1.0-rc.1](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.1.0-rc.1) — 2026-10-11
+
+- add optional Telegram notifications for claimed rewards on desktop and server, with delivery separate from mining
+- configure, test and remove Telegram notifications in Settings > Notifications; bot tokens stay private
+- remove the redundant terminal-update hint from Maintenance
+
 ## [v2.0.4](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.0.4) — 2026-10-10
 
 - hide expired campaigns from Available and remove the Expired filter, while keeping History and pending claims intact
