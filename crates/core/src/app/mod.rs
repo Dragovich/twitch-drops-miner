@@ -44,6 +44,8 @@ pub fn message(path: &str, replacements: &[(&str, &str)]) -> String {
 pub struct Notification {
     pub title: String,
     pub message: String,
+    #[serde(skip)]
+    pub claim: Option<crate::notifications::Claim>,
 }
 
 pub struct Application {
@@ -56,6 +58,7 @@ pub struct Application {
     pub(crate) writes: TaskTracker,
     pub(crate) settings_slot: Arc<Semaphore>,
     pub notifications: broadcast::Sender<Notification>,
+    pub telegram: crate::notifications::Telegram,
     pub(crate) game_queries: RwLock<Option<mpsc::Sender<commands::GameRequest>>>,
     commands: mpsc::Sender<CommandRequest>,
 }
@@ -64,6 +67,7 @@ impl Application {
     pub fn open(directory: PathBuf) -> Result<(Arc<Self>, mpsc::Receiver<CommandRequest>)> {
         let data = Arc::new(DataDirectory::open(directory)?);
         let settings = data.settings()?;
+        let telegram = crate::notifications::Telegram::open(&data.path)?;
         let (commands, receiver) = mpsc::channel(64);
         let history = History::load(&data.path);
         let archive = CampaignArchive::load(&data.path);
@@ -93,6 +97,7 @@ impl Application {
                 writes: TaskTracker::new(),
                 settings_slot: Arc::new(Semaphore::new(1)),
                 notifications: broadcast::channel(32).0,
+                telegram,
                 game_queries: RwLock::new(None),
                 commands,
             }),
@@ -251,8 +256,24 @@ impl Application {
         self.snapshot.write().await.status = text;
     }
 
-    pub fn notify(&self, title: String, message: String) {
-        let _ = self.notifications.send(Notification { title, message });
+    pub fn notify_claimed(
+        &self,
+        account: u64,
+        campaign: &crate::domain::Campaign,
+        drop: &crate::domain::Drop,
+    ) {
+        let _ = self.notifications.send(Notification {
+            title: message("gui.backend.drop_claimed", &[]),
+            message: drop.name.clone(),
+            claim: Some(crate::notifications::Claim {
+                account,
+                drop_id: drop.id.clone(),
+                game: campaign.game.name.clone(),
+                campaign: campaign.name.clone(),
+                reward: drop.name.clone(),
+                epoch: self.telegram.epoch(),
+            }),
+        });
     }
 
     pub async fn drain_writes(&self) {

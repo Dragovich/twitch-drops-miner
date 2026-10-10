@@ -98,6 +98,14 @@ impl ApiError {
 impl From<AppError> for ApiError {
     fn from(error: AppError) -> Self {
         match error {
+            AppError::Telegram(error) => Self(
+                if error == twitch_drops_miner_core::notifications::Error::Conflict {
+                    StatusCode::CONFLICT
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
+                error.code(),
+            ),
             AppError::InvalidRequest => Self::invalid(),
             AppError::InvalidManualDuration => {
                 Self(StatusCode::BAD_REQUEST, "invalid_manual_duration")
@@ -152,6 +160,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/campaigns", get(campaigns))
         .route("/api/console", get(console))
         .route("/api/settings", get(settings).post(update_settings))
+        .route("/api/telegram", get(telegram).post(save_telegram))
+        .route("/api/telegram/test", post(test_telegram))
         .route("/api/games", post(games))
         .route("/api/settings/verify-proxy", post(verify_proxy))
         .route("/api/version", get(version))
@@ -483,4 +493,21 @@ async fn version(State(app): State<Arc<App>>) -> Json<releases::ReleaseInfo> {
         return Json(releases::ReleaseInfo::default());
     }
     Json(app.releases.check(&app.shutdown).await)
+}
+
+async fn telegram(
+    State(app): State<Arc<App>>,
+) -> Json<twitch_drops_miner_core::notifications::View> {
+    Json(app.telegram.view())
+}
+async fn save_telegram(
+    State(app): State<Arc<App>>,
+    request: Request,
+) -> Result<Json<twitch_drops_miner_core::notifications::View>, ApiError> {
+    let update = document(request).await?;
+    Ok(Json(app.application.save_telegram(update).await?))
+}
+async fn test_telegram(State(app): State<Arc<App>>) -> Result<Json<Value>, ApiError> {
+    app.test_telegram().await?;
+    Ok(Json(json!({"success":true})))
 }

@@ -362,6 +362,8 @@ async fn public_assets_and_spa_allowlist_preserve_private_api_boundaries() {
     for path in [
         "/api/reload",
         "/api/cache/clear",
+        "/api/telegram",
+        "/api/telegram/test",
         "/api/close",
         "/api/channels/select",
         "/api/mode/exit-manual",
@@ -424,6 +426,57 @@ async fn public_assets_and_spa_allowlist_preserve_private_api_boundaries() {
             .0,
         StatusCode::OK
     );
+}
+
+#[tokio::test]
+async fn telegram_configuration_is_protected_and_tokens_are_write_only() {
+    let test = TestApp::new("");
+    let token = test.enable().await;
+    for path in ["/api/telegram", "/api/telegram/test"] {
+        assert_eq!(
+            test.call(Method::POST, path, json!({}), "", &[("x-tdm-request", "1")])
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert_eq!(
+        test.call(Method::GET, "/api/telegram", Value::Null, "", &[])
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let revision = test.app.telegram.view().revision;
+    let update =
+        json!({"revision":revision,"enabled":true,"token":"123:private_token","chat_id":"42"});
+    let (status, _, body) = test
+        .call(
+            Method::POST,
+            "/api/telegram",
+            update.clone(),
+            &token,
+            &[("x-tdm-request", "1")],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!String::from_utf8(body).unwrap().contains("private_token"));
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/telegram",
+            update,
+            &token,
+            &[("x-tdm-request", "1")]
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    for path in ["/api/telegram", "/api/settings", "/api/status"] {
+        let (status, _, body) = test.call(Method::GET, path, Value::Null, &token, &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(!String::from_utf8(body).unwrap().contains("private_token"));
+    }
 }
 
 #[tokio::test]
