@@ -321,33 +321,30 @@ pub(super) async fn run_generation(
     ));
     let (events, receiver) = mpsc::channel(256);
     let mut pool = PubSub::start(client.clone(), events);
-    let profile = refresh_profile(app.clone(), client.clone());
+    let profile_due = Notify::new();
+    let profile = async {
+        loop {
+            refresh_profile(app.clone(), client.clone()).await?;
+            profile_due.notified().await;
+        }
+    };
+    let validation = validate_session(&app, &session, &client.http, &profile_due);
     let (queries, requests) = mpsc::channel(4);
     *app.game_queries.write().await = Some(queries);
     let directory = game_directory(client.clone(), requests);
-    let mut mining = Mining::new(app.clone(), client, journal, intent, receiver);
+    let mut mining = Mining::new(app.clone(), client.clone(), journal, intent, receiver);
     {
         let saved = resume.lock().await;
         mining.restore(&saved);
     }
     let result = {
-        let run = mining.run(&mut pool);
-        tokio::pin!(run);
-        let with_profile = async {
-            tokio::select! {
-                biased;
-                result = &mut run => result,
-                result = profile => match result {
-                    Ok(()) => run.await,
-                    Err(error) => Err(error),
-                },
-            }
-        };
-        // The future belongs to this generation and is dropped if mining exits.
-        // Loading the identity never holds up inventory or the watch loop.
+        // These reads belong to the generation and never block the watch loop.
         tokio::select! {
             biased;
-            result = with_profile => result,
+            _ = cancel.cancelled() => Err(TwitchError::Cancelled),
+            result = validation => result,
+            result = mining.run(&mut pool) => result,
+            result = profile => result,
             result = directory => result,
         }
     };
@@ -359,6 +356,49 @@ pub(super) async fn run_generation(
     while mining.jobs.join_next().await.is_some() {}
     pool.close().await;
     result
+}
+
+async fn validate_session(
+    app: &App,
+    session: &Session,
+    http: &TwitchHttp,
+    profile_due: &Notify,
+) -> Result<(), TwitchError> {
+    use crate::app::activity::{ActivityEvent, Category, Severity};
+
+    let mut delay = Duration::from_secs(3600);
+    loop {
+        tokio::select! { biased;
+            _ = http.cancel.cancelled() => return Err(TwitchError::Cancelled),
+            _ = tokio::time::sleep(delay) => {},
+        }
+        match session.validate(http).await {
+            Ok(Some(_)) => {
+                profile_due.notify_one();
+                app.recover_activity(&ActivityEvent::new(
+                    "gui.backend.twitch_error",
+                    Category::Connection,
+                    Severity::Warning,
+                    &[("operation", "validation")],
+                ))
+                .await;
+                delay = Duration::from_secs(3600);
+            }
+            // Drain mining before the existing authentication path renews credentials.
+            Ok(None) => return Ok(()),
+            Err(error @ (TwitchError::Unauthorized | TwitchError::Cancelled)) => return Err(error),
+            Err(error) => {
+                app.record_activity(ActivityEvent::new(
+                    "gui.backend.twitch_error",
+                    Category::Connection,
+                    Severity::Warning,
+                    &[("operation", "validation"), ("error", &error.to_string())],
+                ))
+                .await;
+                delay = Duration::from_secs(60);
+            }
+        }
+    }
 }
 
 pub(super) async fn game_directory(
