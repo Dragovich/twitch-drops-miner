@@ -657,9 +657,9 @@ Cargo manifest/lock own the version. Prepare release opens a draft PR; a maintai
 the same local release script and draft-PR process if its token is unavailable. Publish is manual from
 validated main and uses reviewed CHANGELOG notes/GHCR. Every release attaches and verifies
 `latest.json` before publishing; stable releases alone move the latest pointer. Use scoped
-conventional commit messages and concise release change lists. The release script owns the
-single `Changelog:` link and issue footer; do not duplicate them in CHANGELOG entries.
-Accept exact-commit push or manual validation.
+conventional commit messages and concise release change lists, with relevant PR links in parentheses.
+The release script owns the single `Changelog:` link and issue footer; do not duplicate them
+in CHANGELOG entries. Accept exact-commit push or manual validation.
 Publish first to GHCR at ghcr.io/ohne-b/twitch-drops-miner using the scoped workflow token.
 Then mirror the published image to Docker Hub through the shared main-only `prod` workflow.
 Use the configured repository/username variables and token secret; never expose credentials

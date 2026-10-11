@@ -1,5 +1,16 @@
 # Changelog
 
+## [v2.1.0](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.1.0) — 2026-10-11
+
+- add optional Telegram notifications for claimed rewards on desktop and server, with private bot settings and a test button ([#100](https://github.com/ohne-b/twitch-drops-miner/pull/100))
+- add optional reward thumbnails and clearer Telegram messages, with the game and reward in bold ([#102](https://github.com/ohne-b/twitch-drops-miner/pull/102))
+- link the saved Telegram bot and simplify notification controls with Save/Delete icons and no redundant saved-settings message ([#102](https://github.com/ohne-b/twitch-drops-miner/pull/102))
+- prevent repeated requests and duplicate announcements for acknowledged reward claims, including after restarts and cache clears ([#103](https://github.com/ohne-b/twitch-drops-miner/pull/103))
+- fix the Docker Hub credential handoff for automatic release and edge mirroring ([#104](https://github.com/ohne-b/twitch-drops-miner/pull/104))
+- remove the redundant terminal-update hint from Maintenance ([#97](https://github.com/ohne-b/twitch-drops-miner/pull/97))
+
+Older versions may reject updated Telegram settings or claim receipts. Restore a matching data backup if you downgrade.
+
 ## [v2.1.0-rc.1](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.1.0-rc.1) — 2026-10-11
 
 - add optional Telegram notifications for claimed rewards on desktop and server, with delivery separate from mining
