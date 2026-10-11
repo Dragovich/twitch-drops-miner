@@ -70,6 +70,7 @@ pub enum Request {
     Settings,
     SaveSettings(Value),
     Telegram,
+    TelegramBot,
     SaveTelegram(twitch_drops_miner_core::notifications::Update),
     TestTelegram,
     SelectChannel(ChannelSelection),
@@ -99,6 +100,7 @@ impl Request {
                 );
             }
             Self::Telegram => return Ok(json!(app.telegram.view())),
+            Self::TelegramBot => return Ok(json!(app.telegram_bot().await)),
             Self::SaveTelegram(update) => return Ok(json!(app.save_telegram(update).await?)),
             Self::TestTelegram => app.test_telegram().await?,
             Self::Settings => return Ok(json!(app.snapshot.read().await.settings)),
@@ -295,6 +297,9 @@ mod tests {
         ));
         let telegram = Request::Telegram.run(app.clone()).await.unwrap();
         assert_eq!(telegram["token_configured"], false);
+        let bot = Request::TelegramBot.run(app.clone()).await.unwrap();
+        assert_eq!(bot["revision"], telegram["revision"]);
+        assert!(bot["bot"].is_null());
         let update = serde_json::from_value(json!({"revision":telegram["revision"],"enabled":true,"chat_id":"42","token":"123:private_token"})).unwrap();
         let saved = Request::SaveTelegram(update)
             .run(app.clone())
