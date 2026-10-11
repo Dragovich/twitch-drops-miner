@@ -29,6 +29,8 @@ the alternate agent instruction files; do not recreate copies or links.
   verify its identity before publishing images. Registry publication retains the workflow's
   built-in token. Keep tokens out of source, logs and chat; never reuse a local CLI credential
   as an Actions secret.
+- Release and edge callers explicitly pass only `DOCKERHUB_TOKEN` to the reusable mirror
+  workflow, which declares it required and reads it from `prod`. Do not inherit all secrets.
 
 ## Architecture
 
