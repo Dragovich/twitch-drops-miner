@@ -440,12 +440,17 @@ async fn telegram_configuration_is_protected_and_tokens_are_write_only() {
             StatusCode::UNAUTHORIZED
         );
     }
-    assert_eq!(
-        test.call(Method::GET, "/api/telegram", Value::Null, "", &[])
-            .await
-            .0,
-        StatusCode::UNAUTHORIZED
-    );
+    for path in ["/api/telegram", "/api/telegram/bot"] {
+        assert_eq!(
+            test.call(Method::GET, path, Value::Null, "", &[]).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    let (status, _, body) = test
+        .call(Method::GET, "/api/telegram/bot", Value::Null, &token, &[])
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(serde_json::from_slice::<Value>(&body).unwrap()["bot"].is_null());
     let revision = test.app.telegram.view().revision;
     let update =
         json!({"revision":revision,"enabled":true,"token":"123:private_token","chat_id":"42"});

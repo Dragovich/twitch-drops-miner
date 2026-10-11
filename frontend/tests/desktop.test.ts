@@ -26,6 +26,7 @@ it('routes only supported native requests and preserves history filters', () => 
     value: { campaign_id: 'one', limit: 25 },
   });
   expect(nativeRequest('/api/telegram', undefined, 'GET')).toEqual({ kind: 'telegram' });
+  expect(nativeRequest('/api/telegram/bot', undefined, 'GET')).toEqual({ kind: 'telegram_bot' });
   expect(nativeRequest('/api/telegram', { revision: 'r', token: 'fake' }, 'POST')).toEqual({
     kind: 'save_telegram',
     value: { revision: 'r', token: 'fake' },

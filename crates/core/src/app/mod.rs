@@ -271,6 +271,7 @@ impl Application {
                 game: campaign.game.name.clone(),
                 campaign: campaign.name.clone(),
                 reward: drop.name.clone(),
+                image_url: drop.image_url(),
                 epoch: self.telegram.epoch(),
             }),
         });

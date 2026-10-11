@@ -265,8 +265,11 @@ embed it and run without a build tool/runtime companion. Production builds never
 - Claims require account-issued instance IDs, skip upcoming campaigns and stop at the strict
   campaign-end + 24-hour deadline. Earned claims are independent of mining/ignore selection.
   Persist the account-scoped intent before RPC, then its success receipt and history. Keep the
-  receipt until the owner acknowledges domain state and archives completion; reconcile after
-  restart even without catalog metadata. Never retire it before durable history/archive writes.
+  receipt through the claim window after durable history/archive recovery. Settled receipts
+  suppress the same account/drop/instance across refresh, restart and cache clear without
+  overriding fresh unclaimed inventory. A new instance or an explicit false-to-true account
+  linkage permits another attempt, without repeating the reward announcement. Recover unfinished
+  writes even without catalog metadata; prune settled receipts only at the strict claim deadline.
 - History imports Twitch-confirmed claims during inventory refresh, independent of mining
   selection and reward type. Require account claim state or complete in-window award evidence;
   stale local progress must not override newer award evidence. Deduplicate by drop ID and use
@@ -320,9 +323,24 @@ embed it and run without a build tool/runtime companion. Production builds never
   Only explicit bounded 429 responses retry once; ambiguous delivery failures never replay.
   Automatic messages wait cancellably behind a test; tests are single-flight. Failures cannot
   stop mining or undo claims. Activity failures collapse; successful deliveries/tests recover them.
+- Claim alerts use three consecutive lines, with a plain heading and the game and reward bold in HTML.
+  Escape and bound upstream names before formatting; never truncate completed markup.
+- Include image defaults off, including existing Telegram configuration. Enabled claim alerts
+  keep the same text and request a compact Telegram link preview for validated public
+  HTTPS Twitch artwork; missing/unsafe artwork stays text-only. Telegram controls rendering.
+  Never upload/download image bodies or add another message; tests remain text-only.
 - Settings > Notifications shares the same save/remove/test application methods through guarded
   server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
   additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+  Form errors stay inline without a reload-settings action. Revision conflicts retain edits
+  and explain that reopening Notifications loads the current saved settings.
+- Show the saved bot name as a chat link beside Telegram's heading. Resolve it with a
+  separate best-effort `getMe` read through the isolated client, bounded to three seconds
+  and 64 KiB. Cache validated name/username in memory per configuration; serialize lookups
+  and fence cancelled/stale replies. Keep tokens server-side and lookup failures separate
+  from saves/delivery. Fixtures disable lookup traffic. Save uses the MDI save icon and its
+  disabled state confirms success; omit the saved banner. Remove configuration is an
+  accessible, icon-only delete action; retain inline errors and test-send feedback.
 
 ## Authentication and storage
 

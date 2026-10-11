@@ -112,14 +112,17 @@ own authorization page.
 
 ### Telegram notifications
 
-In **Settings > Notifications**, save a bot token and numeric chat ID, then select **Send test**.
-Create a dedicated bot with [@BotFather](https://t.me/BotFather), open its chat and send `/start`.
-Your chat ID is `message.chat.id` in your bot's [getUpdates response](https://core.telegram.org/bots/api#getupdates).
-Keep the bot token private. Leave its field blank to keep a saved token.
+1. Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the prompts.
+   Choose a username ending in `bot` and copy the token it gives you.
+2. Open **your new bot** using BotFather's link and send `/start`. It does not need to reply.
+3. In a private browser window, open `https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates`,
+   replacing `YOUR_BOT_TOKEN` with your token. Keep the `bot` prefix.
+4. Find the message you just sent. Copy the number under `message` → `chat` → `id`
+   (for example, `"chat":{"id":123456789,...}`). If `result` is empty, send your bot `hi` and refresh.
+5. In **Settings > Notifications**, enable claim alerts, paste the token and chat ID,
+   select **Save**, then **Send test**.
 
-Alerts report successful claims; delivery is best effort. Disable Telegram to stop alerts,
-or **Remove configuration** to clear its credentials. The private configuration is in `data/telegram.json`
-(or the desktop data folder).
+Keep the token and the URL containing it private. If shared, revoke the token through BotFather.
 
 ## Updating
 
