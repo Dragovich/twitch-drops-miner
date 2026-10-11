@@ -318,7 +318,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   Only explicit bounded 429 responses retry once; ambiguous delivery failures never replay.
   Automatic messages wait cancellably behind a test; tests are single-flight. Failures cannot
   stop mining or undo claims. Activity failures collapse; successful deliveries/tests recover them.
-- Claim alerts use three consecutive lines, with the heading, game and reward bold in HTML.
+- Claim alerts use three consecutive lines, with a plain heading and the game and reward bold in HTML.
   Escape and bound upstream names before formatting; never truncate completed markup.
 - Include image defaults off, including existing Telegram configuration. Enabled claim alerts
   keep the same text and request a compact Telegram link preview for validated public

@@ -394,7 +394,7 @@ async fn worker_deduplicates_claims_and_never_exposes_internal_metadata() {
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
     assert_eq!(
         body["text"],
-        "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>Reward</b>"
+        "Drop claimed\n<b>Game</b> \u{2014} Campaign\nReward: <b>Reward</b>"
     );
     assert_eq!(body["parse_mode"], "HTML");
     assert_eq!(
@@ -468,7 +468,7 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
         service
             .send(
                 service.epoch(),
-                "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>",
+                "Drop claimed\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>",
                 "",
                 &CancellationToken::new(),
                 false,
@@ -481,7 +481,7 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
         let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
         assert_eq!(
             body["text"],
-            "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>"
+            "Drop claimed\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>"
         );
         assert_eq!(body["parse_mode"], "HTML");
         assert!(body.get("reply_markup").is_none());
@@ -516,7 +516,7 @@ fn claim_message_escapes_names_and_bounds_them_before_formatting() {
     };
     assert_eq!(
         claim.message(),
-        "<b>Drop claimed</b>\n<b>Shakes &amp; Fidget</b> \u{2014} &lt;Campaign&gt; &amp;amp;\nReward: <b>&lt;/b&gt;\u{1f3c6}&lt;b&gt;</b>"
+        "Drop claimed\n<b>Shakes &amp; Fidget</b> \u{2014} &lt;Campaign&gt; &amp;amp;\nReward: <b>&lt;/b&gt;\u{1f3c6}&lt;b&gt;</b>"
     );
 
     claim.game = "\u{1f3c6}".repeat(2000);
@@ -525,7 +525,7 @@ fn claim_message_escapes_names_and_bounds_them_before_formatting() {
     assert_eq!(
         claim.message(),
         format!(
-            "<b>Drop claimed</b>\n<b>{}</b> \u{2014} {}\nReward: <b>{}</b>",
+            "Drop claimed\n<b>{}</b> \u{2014} {}\nReward: <b>{}</b>",
             "\u{1f3c6}".repeat(480),
             "&lt;".repeat(480),
             "&amp;".repeat(480)

@@ -121,7 +121,7 @@ impl Claim {
                 .replace('>', "&gt;")
         };
         format!(
-            "<b>Drop claimed</b>\n<b>{}</b> — {}\nReward: <b>{}</b>",
+            "Drop claimed\n<b>{}</b> — {}\nReward: <b>{}</b>",
             escape(&self.game),
             escape(&self.campaign),
             escape(&self.reward)
