@@ -1,5 +1,7 @@
 use super::session::{authenticate, reset_session};
 use super::*;
+
+mod auto_claim;
 use crate::{
     domain::{ChannelIdentity, Game, MAX_ESTIMATED_MINUTES},
     store::{CampaignArchive, History, HistoryFilter},
@@ -2323,10 +2325,11 @@ async fn clearing_history_before_claim_receipt_reconciliation_does_not_restore_t
         &miner.campaigns[0].drops[0],
         &Settings::default(),
     );
-    assert!(
+    assert_eq!(
         claim(&miner.app, &miner.client, &miner.journal, pending)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::Claimed
     );
     assert_eq!(miner.app.history.lock().await.total(), 1);
     miner.app.history.lock().await.clear().unwrap();
@@ -2361,6 +2364,7 @@ async fn claim_journal_recovers_after_history_write_failure_without_fabricating_
     assert_eq!(ClaimJournal::load(dir.path()).unwrap().pending(42).len(), 1);
     std::fs::remove_dir(&file).unwrap();
     let mut miner = miner;
+    miner.app.settings.write().await.auto_claim_drops = false;
     miner.journal = Arc::new(Mutex::new(ClaimJournal::load(dir.path()).unwrap()));
     miner.recover_claims(&HashMap::new()).await.unwrap();
     assert_eq!(miner.app.history.lock().await.total(), 1);
@@ -2415,10 +2419,11 @@ async fn journal_must_be_durable_before_remote_claim_and_failed_claims_are_not_h
             .all(|r| r.url.path() != "/gql")
     );
     std::fs::remove_dir(&file).unwrap();
-    assert!(
-        !claim(&miner.app, &miner.client, &miner.journal, entry)
+    assert_eq!(
+        claim(&miner.app, &miner.client, &miner.journal, entry)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::NotClaimed
     );
     assert_eq!(miner.app.history.lock().await.total(), 0);
     assert!(
@@ -4390,10 +4395,11 @@ async fn preclaim_publication_and_shutdown_leave_a_durable_receipt_for_finished_
     let history_revision = miner.app.snapshot.read().await.history_revision;
     // The durable RPC result must invalidate History even without a catalog record.
     miner.campaigns.clear();
-    assert!(
+    assert_eq!(
         claim(&miner.app, &miner.client, &miner.journal, pending)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::Claimed
     );
     assert!(ClaimJournal::load(dir.path()).unwrap().pending(42)[0].confirmed);
     assert_eq!(

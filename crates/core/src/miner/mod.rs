@@ -137,7 +137,7 @@ enum Job {
         id: String,
         announce: bool,
         attempted_at: chrono::DateTime<Utc>,
-        result: Result<bool, TwitchError>,
+        result: Result<ClaimOutcome, TwitchError>,
     },
     Update {
         result: Result<Vec<Channel>, TwitchError>,
@@ -466,7 +466,7 @@ impl Mining {
             let candidate = self
                 .campaigns
                 .iter()
-                .filter(|c| !c.upcoming(wall))
+                .filter(|c| settings.auto_claim_drops && !c.upcoming(wall))
                 .flat_map(|c| c.drops.iter().map(move |d| (c, d)))
                 .find(|(c, d)| {
                     d.can_claim(c.ends_at, wall)
@@ -497,7 +497,8 @@ impl Mining {
                 .pending_claims
                 .iter()
                 .find(|p| {
-                    wall < p.retry_until
+                    settings.auto_claim_drops
+                        && wall < p.retry_until
                         && self
                             .claim_retry
                             .get(&p.entry.id)
@@ -656,7 +657,9 @@ impl Mining {
             });
             return;
         }
-        if let Some(id) = self.notifications.iter().next().cloned() {
+        if settings.auto_claim_drops
+            && let Some(id) = self.notifications.iter().next().cloned()
+        {
             self.notifications.remove(&id);
             let client = self.client.clone();
             self.spawn(JobKind::Notification, async move {
@@ -716,7 +719,7 @@ impl Mining {
                 Category::Claims,
                 None,
                 Some(id.clone()),
-                *result == Ok(true),
+                *result == Ok(ClaimOutcome::Claimed),
             ),
             Job::Update { result, .. } => ("streams", Category::Mining, None, None, result.is_ok()),
             Job::Notification(result) => (
@@ -1041,7 +1044,7 @@ impl Mining {
             }
             Job::Claim {
                 id,
-                result: Ok(true),
+                result: Ok(ClaimOutcome::Claimed),
                 announce,
                 attempted_at,
             } => {
@@ -1090,6 +1093,10 @@ impl Mining {
                 self.publish = true;
                 None
             }
+            Job::Claim {
+                result: Ok(ClaimOutcome::Disabled),
+                ..
+            } => None,
             Job::Claim { id, result, .. } => {
                 self.claim_retry.insert(id, now + Duration::from_secs(60));
                 result.err()
