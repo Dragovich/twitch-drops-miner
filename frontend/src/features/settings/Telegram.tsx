@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { mdiContentSave, mdiDeleteOutline, mdiOpenInNew } from '@mdi/js';
+import { Icon } from '@mdi/react';
 import { ApiError, request } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
 import {
@@ -8,6 +10,7 @@ import {
   Field,
   HelpButton,
   Input,
+  IconButton,
   Notice,
   useAction,
 } from '../../shared/ui';
@@ -21,10 +24,16 @@ interface Configuration {
   unreadable: boolean;
 }
 
+interface BotIdentity {
+  revision: string;
+  bot: { name: string; username: string } | null;
+}
+
 export default function Telegram({ connected }: { connected: boolean }) {
   const t = useT();
   const action = useAction();
   const [saved, setSaved] = useState<Configuration>();
+  const [identity, setIdentity] = useState<BotIdentity>();
   const [enabled, setEnabled] = useState(false);
   const [includeImage, setIncludeImage] = useState(false);
   const [chat, setChat] = useState('');
@@ -49,6 +58,17 @@ export default function Telegram({ connected }: { connected: boolean }) {
       });
     return () => controller.abort();
   }, [reload]);
+  useEffect(() => {
+    if (!saved?.token_configured || !connected) return;
+    const controller = new AbortController();
+    void request<BotIdentity>('/api/telegram/bot', undefined, 'GET', controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) setIdentity(value);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [saved?.revision, saved?.token_configured, connected]);
+  const bot = !token && identity?.revision === saved?.revision ? identity?.bot : undefined;
   const dirty =
     !!saved &&
     (enabled !== saved.enabled ||
@@ -75,13 +95,26 @@ export default function Telegram({ connected }: { connected: boolean }) {
       setIncludeImage(value.include_image);
       setChat(value.chat_id);
       setToken('');
-    }, t('telegram_saved'));
+    });
   }
   return (
     <section id="notifications" className="max-w-md space-y-4">
       <div className="flex items-center gap-1">
         <h2 className="font-semibold">Telegram</h2>
         <HelpButton label="Telegram" text={t('telegram_help')} />
+        {bot && (
+          <a
+            href={`https://t.me/${encodeURIComponent(bot.username)}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t('telegram_open_bot', { name: bot.name })}
+            title={`@${bot.username}`}
+            className="ml-auto inline-flex min-w-0 max-w-[60%] items-center gap-1 text-muted hover:text-text"
+          >
+            <span className="truncate underline underline-offset-4">{bot.name}</span>
+            <Icon path={mdiOpenInNew} className="mdi-icon" />
+          </a>
+        )}
       </div>
       {loadFailed ? (
         <Notice error>{t('gui.auth.request_failed')}</Notice>
@@ -142,8 +175,9 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 }}
               />
             </Field>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" primary disabled={!dirty}>
+                <Icon path={mdiContentSave} className="mdi-icon" />
                 {t('telegram_save')}
               </Button>
               <Button
@@ -155,7 +189,11 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 {t('telegram_test')}
               </Button>
               {saved.token_configured && (
-                <Button onClick={() => void save(true)}>{t('telegram_remove')}</Button>
+                <IconButton
+                  path={mdiDeleteOutline}
+                  label={t('telegram_remove')}
+                  onClick={() => void save(true)}
+                />
               )}
             </div>
           </fieldset>

@@ -370,7 +370,7 @@
             "telegram_token_saved": "Token saved",
             "telegram_save": "Save",
             "telegram_retry": "Try again",
-            "telegram_saved": "Telegram settings saved.",
+            "telegram_open_bot": "Open {name} in Telegram",
             "telegram_test": "Send test",
             "telegram_test_sent": "Test message sent.",
             "telegram_remove": "Remove configuration",

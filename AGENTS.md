@@ -329,6 +329,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
   Form errors stay inline without a reload-settings action. Revision conflicts retain edits
   and explain that reopening Notifications loads the current saved settings.
+- Show the saved bot name as a chat link beside Telegram's heading. Resolve it with a
+  separate best-effort `getMe` read through the isolated client, bounded to three seconds
+  and 64 KiB. Cache validated name/username in memory per configuration; serialize lookups
+  and fence cancelled/stale replies. Keep tokens server-side and lookup failures separate
+  from saves/delivery. Fixtures disable lookup traffic. Save uses the MDI save icon and its
+  disabled state confirms success; omit the saved banner. Remove configuration is an
+  accessible, icon-only delete action; retain inline errors and test-send feedback.
 
 ## Authentication and storage
 
