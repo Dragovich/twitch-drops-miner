@@ -18,6 +18,51 @@ const snapshot: Snapshot = {
 const headers = { 'X-TDM-Request': '1' };
 
 for (const width of [1280, 320]) {
+  test(`automatic claiming persists globally with accessible help at ${width}px`, async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?edit=priorities');
+    const control = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
+    const before = await (await request.get('/api/settings')).json();
+    await expect(control).toBeChecked();
+    await control.focus();
+    await control.press('Space');
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(false);
+    await page.reload();
+    await expect(control).not.toBeChecked();
+    const after = await (await request.get('/api/settings')).json();
+    expect(after.games_to_watch).toEqual(before.games_to_watch);
+    expect(after.mining_benefits).toEqual(before.mining_benefits);
+    expect(after.mining_paused).toBe(before.mining_paused);
+    const help = page.getByRole('button', { name: 'Automatically claim drops help', exact: true });
+    await help.focus();
+    await help.press('Enter');
+    const note = page.getByRole('note', { name: 'Automatically claim drops help', exact: true });
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('claim earned drops yourself in your Twitch inventory');
+    await expect(note).toContainText('Some rewards require earlier drops to be claimed.');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(note).toBeHidden();
+    if (width < 768) {
+      expect((await control.locator('..').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    await page.screenshot({ path: `../artifacts/auto-claim-${width}.png` });
+    await control.check();
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(true);
+  });
+}
+
+for (const width of [1280, 320]) {
   test(`mining priority uses a persistent icon selector without rewriting the manual order at ${width}px`, async ({
     page,
     request,
@@ -102,6 +147,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
 }) => {
   await page.goto('/settings#mining');
   const priority = page.getByRole('combobox', { name: 'Mining priority', exact: true });
+  const autoClaim = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -118,6 +164,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   await priority.selectOption('short_events');
   await sent;
   await priority.selectOption('ending_soonest');
+  await autoClaim.uncheck();
   const current = await (await request.get('/api/settings')).json();
   expect(
     (
@@ -130,11 +177,16 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   release();
   await expect(page.getByRole('alert')).toContainText('Settings changed on another device');
   await expect(priority).toHaveValue('ending_soonest');
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).mining_priority_mode).toBe('manual');
+  expect((await (await request.get('/api/settings')).json()).auto_claim_drops).toBe(true);
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect
     .poll(async () => (await (await request.get('/api/settings')).json()).mining_priority_mode)
     .toBe('ending_soonest');
+  await expect
+    .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+    .toBe(false);
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
@@ -151,11 +203,14 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   try {
     await request.post('/__test/reconnect', { headers, data: {} });
     await expect(priority).toBeDisabled();
+    await expect(autoClaim).toBeDisabled();
   } finally {
     await page.context().setOffline(false);
   }
   await expect(priority).toBeEnabled();
   await expect(priority).toHaveValue('short_events');
+  await expect(autoClaim).toBeEnabled();
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
