@@ -135,6 +135,8 @@ enum Job {
     },
     Claim {
         id: String,
+        announce: bool,
+        attempted_at: chrono::DateTime<Utc>,
         result: Result<bool, TwitchError>,
     },
     Update {
@@ -457,24 +459,34 @@ impl Mining {
             .iter()
             .any(|kind| self.busy.contains(kind))
         {
-            if let Some((campaign, drop)) = self
+            let journal = self.journal.lock().await;
+            let candidate = self
                 .campaigns
                 .iter()
                 .filter(|c| !c.upcoming(wall))
                 .flat_map(|c| c.drops.iter().map(move |d| (c, d)))
                 .find(|(c, d)| {
                     d.can_claim(c.ends_at, wall)
+                        && !journal.acknowledged(self.client.user_id, d, c.linked)
                         && self.claim_retry.get(&d.id).is_none_or(|at| now >= *at)
                 })
-            {
-                let id = drop.id.clone();
-                let pending = PendingClaim::new(self.client.user_id, campaign, drop, settings);
+                .map(|(c, d)| PendingClaim::new(self.client.user_id, c, d, settings));
+            drop(journal);
+            if let Some(pending) = candidate {
+                let id = pending.entry.id.clone();
+                let announce = !self.journal.lock().await.settled(self.client.user_id, &id);
+                let attempted_at = pending.entry.claimed_at;
                 let client = self.client.clone();
                 let app = self.app.clone();
                 let journal = self.journal.clone();
                 self.spawn(JobKind::Claim, async move {
                     let result = claim(&app, &client, &journal, pending).await;
-                    Job::Claim { id, result }
+                    Job::Claim {
+                        id,
+                        announce,
+                        attempted_at,
+                        result,
+                    }
                 });
                 return;
             }
@@ -494,9 +506,16 @@ impl Mining {
                 let app = self.app.clone();
                 let journal = self.journal.clone();
                 let id = pending.entry.id.clone();
+                let announce = !self.journal.lock().await.settled(self.client.user_id, &id);
+                let attempted_at = pending.entry.claimed_at;
                 self.spawn(JobKind::Claim, async move {
                     let result = claim(&app, &client, &journal, pending).await;
-                    Job::Claim { id, result }
+                    Job::Claim {
+                        id,
+                        announce,
+                        attempted_at,
+                        result,
+                    }
                 });
                 return;
             }
@@ -689,7 +708,7 @@ impl Mining {
                 None,
                 result.is_ok(),
             ),
-            Job::Claim { id, result } => (
+            Job::Claim { id, result, .. } => (
                 "claim",
                 Category::Claims,
                 None,
@@ -999,7 +1018,10 @@ impl Mining {
             Job::Claim {
                 id,
                 result: Ok(true),
+                announce,
+                attempted_at,
             } => {
+                self.recover_claims(&HashMap::new()).await?;
                 let campaign_id = self
                     .campaigns
                     .iter()
@@ -1011,7 +1033,9 @@ impl Mining {
                     .flat_map(|c| &mut c.drops)
                     .find(|d| d.id == id)
                 {
-                    drop.mark_claimed(Utc::now());
+                    if drop.confirmed_at.is_none_or(|at| at <= attempted_at) {
+                        drop.mark_claimed(attempted_at);
+                    }
                     let mut event = crate::app::activity::ActivityEvent::new(
                         "status.claimed_drop",
                         crate::app::activity::Category::Claims,
@@ -1020,7 +1044,9 @@ impl Mining {
                     );
                     event.drop_id = Some(drop.id.clone());
                     event.campaign_id = campaign_id;
-                    self.app.record_activity(event).await;
+                    if announce {
+                        self.app.record_activity(event).await;
+                    }
                 }
                 if let Some(campaign) = self
                     .campaigns
@@ -1028,15 +1054,16 @@ impl Mining {
                     .find(|c| c.drops.iter().any(|d| d.id == id))
                     && let Some(drop) = campaign.drops.iter().find(|d| d.id == id)
                 {
-                    self.app.notify_claimed(self.client.user_id, campaign, drop);
+                    if announce {
+                        self.app.notify_claimed(self.client.user_id, campaign, drop);
+                    }
                 }
                 self.claim_retry.remove(&id);
-                self.recover_claims(&HashMap::new()).await?;
                 self.claim_wait = Some((id, now + Duration::from_secs(4), 0));
                 self.publish = true;
                 None
             }
-            Job::Claim { id, result } => {
+            Job::Claim { id, result, .. } => {
                 self.claim_retry.insert(id, now + Duration::from_secs(60));
                 result.err()
             }
