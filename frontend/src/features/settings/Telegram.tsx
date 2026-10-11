@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { request } from '../../shared/lib/api';
+import { ApiError, request } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
 import {
   ActionResult,
@@ -56,6 +56,10 @@ export default function Telegram({ connected }: { connected: boolean }) {
         chat_id: chat,
         token,
         remove,
+      }).catch((error: unknown) => {
+        if (error instanceof ApiError && error.message === 'settings_conflict')
+          throw new ApiError(error.status, 'telegram_conflict');
+        throw error;
       });
       setSaved(value);
       setEnabled(value.enabled);
@@ -138,18 +142,6 @@ export default function Telegram({ connected }: { connected: boolean }) {
             </div>
           </fieldset>
           <ActionResult action={action} />
-          {action.error && (
-            <Button
-              className="mt-3"
-              disabled={action.busy}
-              onClick={() => {
-                action.clear();
-                setReload((value) => value + 1);
-              }}
-            >
-              {t('telegram_reload')}
-            </Button>
-          )}
         </form>
       )}
     </section>

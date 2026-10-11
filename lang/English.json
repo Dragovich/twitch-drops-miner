@@ -221,6 +221,7 @@
             "server_unavailable": "The dashboard server is unavailable. Check the connection and try again.",
             "settings_sections": "Settings sections",
             "settings_conflict": "Settings changed on another device. Review your edits, then retry to apply them.",
+            "telegram_conflict": "Settings changed on another device. Reopen Notifications to load the saved settings.",
             "unsaved": "Unsaved changes",
             "proxy": "Proxy URL",
             "proxy_help": "Optional HTTP or HTTPS proxy. Leave empty for a direct connection.",
@@ -372,7 +373,6 @@
             "telegram_test": "Send test",
             "telegram_test_sent": "Test message sent.",
             "telegram_remove": "Remove configuration",
-            "telegram_reload": "Reload saved settings",
             "telegram_help": "Create a bot with @BotFather in Telegram, then open your new bot and send /start. Enter its token and your numeric chat ID. Save, then send a test. Leave the token blank to keep the saved one. Setup instructions are in the README."
         },
         "backend": {

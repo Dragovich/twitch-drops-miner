@@ -321,6 +321,8 @@ embed it and run without a build tool/runtime companion. Production builds never
 - Settings > Notifications shares the same save/remove/test application methods through guarded
   server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
   additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+  Form errors stay inline without a reload-settings action. Revision conflicts retain edits
+  and explain that reopening Notifications loads the current saved settings.
 
 ## Authentication and storage
 

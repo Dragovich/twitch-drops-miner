@@ -26,6 +26,9 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   const chat = page.getByLabel('Chat ID', { exact: true });
   await expect(enable).toBeEnabled();
   await enable.check();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Enter a valid bot token and numeric chat ID.');
+  await expect(page.getByRole('button', { name: 'Reload saved settings', exact: true })).toHaveCount(0);
   await token.fill('123:private_test_token');
   await chat.fill('42');
   await expect(page.getByRole('button', { name: 'Send test', exact: true })).toBeDisabled();
@@ -77,9 +80,13 @@ test('Telegram reports a configuration conflict without overwriting another clie
   });
   await page.getByLabel('Chat ID', { exact: true }).fill('42');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveText(
+    'Settings changed on another device. Reopen Notifications to load the saved settings.',
+  );
   expect((await (await request.get('/api/telegram')).json()).chat_id).toBe('73');
   await expect(page.getByLabel('Chat ID', { exact: true })).toHaveValue('42');
-  await page.getByRole('button', { name: 'Reload saved settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Reload saved settings', exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Connection', exact: true }).click();
+  await page.getByRole('link', { name: 'Notifications', exact: true }).click();
   await expect(page.getByLabel('Chat ID', { exact: true })).toHaveValue('73');
 });
