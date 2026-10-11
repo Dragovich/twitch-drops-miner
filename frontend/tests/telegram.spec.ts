@@ -22,10 +22,13 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
     name: 'Notify me when a reward is claimed',
     exact: true,
   });
+  const image = page.getByRole('checkbox', { name: 'Include image', exact: true });
   const token = page.getByLabel('Bot token', { exact: true });
   const chat = page.getByLabel('Chat ID', { exact: true });
   await expect(enable).toBeEnabled();
+  await expect(image).not.toBeChecked();
   await enable.check();
+  await image.check();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Enter a valid bot token and numeric chat ID.');
   await expect(
@@ -41,6 +44,7 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   expect(tests).toBe(0);
   const saved = await (await request.get('/api/telegram')).json();
   expect(saved.token_configured).toBe(true);
+  expect(saved.include_image).toBe(true);
   expect(JSON.stringify(saved)).not.toContain('private_test_token');
   expect(
     await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
@@ -51,6 +55,7 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   await page.reload();
   await expect(token).toHaveValue('');
   await expect(enable).toBeChecked();
+  await expect(image).toBeChecked();
   await chat.fill('-84');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Telegram settings saved.', { exact: true })).toBeVisible();
@@ -63,6 +68,7 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   await page.screenshot({ path: '../artifacts/telegram-settings-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Remove configuration', exact: true }).click();
   await expect(enable).not.toBeChecked();
+  await expect(image).not.toBeChecked();
   await expect(chat).toHaveValue('');
   expect((await (await request.get('/api/telegram')).json()).token_configured).toBe(false);
 });

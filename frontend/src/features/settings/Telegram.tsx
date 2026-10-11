@@ -14,6 +14,7 @@ import {
 
 interface Configuration {
   enabled: boolean;
+  include_image: boolean;
   token_configured: boolean;
   chat_id: string;
   revision: string;
@@ -25,6 +26,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
   const action = useAction();
   const [saved, setSaved] = useState<Configuration>();
   const [enabled, setEnabled] = useState(false);
+  const [includeImage, setIncludeImage] = useState(false);
   const [chat, setChat] = useState('');
   const [token, setToken] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
@@ -39,6 +41,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
         if (controller.signal.aborted) return;
         setSaved(value);
         setEnabled(value.enabled);
+        setIncludeImage(value.include_image);
         setChat(value.chat_id);
       })
       .catch(() => {
@@ -46,13 +49,19 @@ export default function Telegram({ connected }: { connected: boolean }) {
       });
     return () => controller.abort();
   }, [reload]);
-  const dirty = !!saved && (enabled !== saved.enabled || chat !== saved.chat_id || token !== '');
+  const dirty =
+    !!saved &&
+    (enabled !== saved.enabled ||
+      includeImage !== saved.include_image ||
+      chat !== saved.chat_id ||
+      token !== '');
   async function save(remove = false) {
     if (!saved) return;
     await action.run(async () => {
       const value = await request<Configuration>('/api/telegram', {
         revision: saved.revision,
         enabled,
+        include_image: includeImage,
         chat_id: chat,
         token,
         remove,
@@ -63,6 +72,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
       });
       setSaved(value);
       setEnabled(value.enabled);
+      setIncludeImage(value.include_image);
       setChat(value.chat_id);
       setToken('');
     }, t('telegram_saved'));
@@ -97,6 +107,14 @@ export default function Telegram({ connected }: { connected: boolean }) {
               onChange={(value) => {
                 action.clear();
                 setEnabled(value);
+              }}
+            />
+            <Check
+              label={t('telegram_include_image')}
+              checked={includeImage}
+              onChange={(value) => {
+                action.clear();
+                setIncludeImage(value);
               }}
             />
             <Field label={t('telegram_bot_token')}>

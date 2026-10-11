@@ -363,6 +363,7 @@
             "profile_unavailable": "Profile details are currently unavailable.",
             "profile_badges_empty": "No badges available.",
             "notifications": "Notifications",
+            "telegram_include_image": "Include image",
             "telegram_enabled": "Notify me when a reward is claimed",
             "telegram_bot_token": "Bot token",
             "telegram_chat_id": "Chat ID",
