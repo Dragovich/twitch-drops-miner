@@ -44,5 +44,7 @@ jobs:
   mirror:
     needs: publish
     uses: ./.github/workflows/docker-mirror.yml
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       version: edge

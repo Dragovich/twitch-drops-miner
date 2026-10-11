@@ -311,6 +311,10 @@ environment before using it:
 - `DOCKERHUB_USERNAME` variable: the Docker ID with push access to that repository.
 - `DOCKERHUB_TOKEN` secret: that account's Docker Hub personal access token with Read & Write access.
 
+Release and edge callers must explicitly pass `DOCKERHUB_TOKEN` to the reusable workflow,
+which declares it required. Setting `environment: prod` there does not replace this handoff.
+Pass only this named secret; release and signing tokens are not needed by the mirror.
+
 The mirror uses version tags (including prereleases) and `edge`. It updates Docker Hub's
 `latest` only when the copied stable version is GitHub's latest release and still matches
 GHCR's `latest` digest. Mirroring older releases never rolls `latest` back.
