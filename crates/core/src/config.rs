@@ -94,6 +94,7 @@ pub struct Settings {
     pub games_to_watch: Vec<String>,
     pub game_metadata: Vec<GameMetadata>,
     pub mining_paused: bool,
+    pub auto_claim_drops: bool,
     pub mining_priority_mode: MiningPriorityMode,
     pub auto_mine_badges: bool,
     pub auto_mine_emotes: bool,
@@ -113,6 +114,7 @@ impl Default for Settings {
             games_to_watch: vec![],
             game_metadata: vec![],
             mining_paused: false,
+            auto_claim_drops: true,
             mining_priority_mode: MiningPriorityMode::Manual,
             auto_mine_badges: false,
             auto_mine_emotes: false,
@@ -297,6 +299,34 @@ mod tests {
         }
     }
     use serde_json::json;
+
+    #[test]
+    fn auto_claim_defaults_on_and_preserves_a_saved_opt_out() {
+        let original = Settings::from_saved(json!({"games_to_watch":["Rust"]})).unwrap();
+        assert!(original.auto_claim_drops);
+        let disabled = original
+            .patched(&json!({"auto_claim_drops":false}))
+            .unwrap();
+        let updated = disabled.patched(&json!({"mining_paused":true})).unwrap();
+        let restored = Settings::from_saved(serde_json::to_value(updated).unwrap()).unwrap();
+        assert!(!restored.auto_claim_drops);
+        assert!(restored.mining_paused);
+        assert_eq!(restored.games_to_watch, original.games_to_watch);
+        assert!(
+            restored
+                .patched(&json!({"auto_claim_drops":true}))
+                .unwrap()
+                .auto_claim_drops
+        );
+        for invalid in [json!("false"), json!(0), json!([])] {
+            assert!(
+                original
+                    .patched(&json!({"auto_claim_drops":invalid}))
+                    .is_err()
+            );
+            assert!(Settings::from_saved(json!({"auto_claim_drops":invalid})).is_err());
+        }
+    }
 
     #[test]
     fn pause_defaults_off_and_survives_settings_updates_and_reload() {

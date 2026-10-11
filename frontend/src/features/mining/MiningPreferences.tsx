@@ -247,6 +247,15 @@ export default function MiningPreferences() {
               className="relative min-h-0 min-w-0 focus-visible:bg-field lg:overflow-y-auto"
             >
               <div className="space-y-5">
+                <div className="flex items-center gap-1">
+                  <Check
+                    label={t('auto_claim_drops')}
+                    checked={draft.auto_claim_drops}
+                    disabled={!connected}
+                    onChange={(value) => change('auto_claim_drops', value)}
+                  />
+                  <HelpButton label={t('auto_claim_drops')} text={t('auto_claim_drops_help')} />
+                </div>
                 <fieldset
                   disabled={!connected}
                   aria-label={t('auto_mine_types')}

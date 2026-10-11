@@ -257,6 +257,8 @@
             "priority_short_events_help": "Selected games are mined first. Active drops available for 24 hours or less take priority, earliest deadline first. Your saved drag order breaks ties.",
             "priority_ending_soonest_help": "Selected games are mined first, with the nearest reward deadlines taking priority. Your saved drag order breaks ties.",
             "auto_mine_types": "Also mine from other games",
+            "auto_claim_drops": "Automatically claim drops",
+            "auto_claim_drops_help": "When off, claim earned drops yourself in your Twitch inventory before they expire. Some rewards require earlier drops to be claimed. Turning this back on also claims outstanding drops. A claim already in progress may still finish.",
             "auto_mine_types_help": "Also mine matching rewards from other games, soonest-ending campaigns first, including required prerequisite drops. Allowed reward types and ignored names still apply.",
             "reward_badges": "Badges",
             "reward_emotes": "Emotes",

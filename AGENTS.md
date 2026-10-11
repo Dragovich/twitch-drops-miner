@@ -264,6 +264,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   Estimates alone never imply completion or a claim.
 - Claims require account-issued instance IDs, skip upcoming campaigns and stop at the strict
   campaign-end + 24-hour deadline. Earned claims are independent of mining/ignore selection.
+  Global `auto_claim_drops` defaults true, including existing settings. When false, continue
+  watching, inventory imports and confirmed receipt recovery, but do not start claim mutations
+  or replay unconfirmed journal intents. Leave Twitch drop reminders in place while disabled.
+  Recheck the saved setting after intent persistence; an already-started claim may finish
+  and must retain durable results and duplicate protection.
+  Re-enabling resumes eligible claims within their existing deadlines. Only confirmed claims
+  unlock dependent rewards; disabling automatic claims never marks a reward claimed.
   Persist the account-scoped intent before RPC, then its success receipt and history. Keep the
   receipt through the claim window after durable history/archive recovery. Settled receipts
   suppress the same account/drop/instance across refresh, restart and cache clear without
@@ -400,6 +407,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   with the selector for assistive technology, and help available during reconnects. Use concise
   labels: Also mine from other games, Allowed reward types and Ignore rewards by name. Keep
   the two reward groups distinct and preserve all existing settings/mining behavior.
+  Mining preferences also contains the global Automatically claim drops checkbox, using shared
+  autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
+  expiry, prerequisites, outstanding claims on re-enable and already-started requests.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox
@@ -469,7 +479,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   anchor-scrolling the title or navigation out of view.
 - Pause is a saved `mining_paused` setting, default false. It gates automatic and manual
   watch events and progress polling, cancels an in-flight watch and fences late results.
-  Inventory refreshes and earned claims continue. Preserve selected games and the current
+  Inventory refreshes and enabled automatic claims continue. Preserve selected games and the current
   reward; manual timers still expire. The Now mining header becomes Paused with a resume
   action beside the selection mode. Settings save failures must not pretend mining stopped.
   A saved resume request keeps the card and title paused, with the control busy, until the

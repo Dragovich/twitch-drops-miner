@@ -1,5 +1,12 @@
 use super::*;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum ClaimOutcome {
+    Claimed,
+    NotClaimed,
+    Disabled,
+}
+
 impl Mining {
     pub(super) async fn recover_claims(
         &mut self,
@@ -64,7 +71,7 @@ pub(super) async fn claim(
     client: &TwitchClient,
     journal: &Arc<Mutex<ClaimJournal>>,
     pending_claim: PendingClaim,
-) -> Result<bool, TwitchError> {
+) -> Result<ClaimOutcome, TwitchError> {
     if pending_claim.user_id != client.user_id {
         return Err(TwitchError::Unauthorized);
     }
@@ -76,7 +83,11 @@ pub(super) async fn claim(
             .map_err(|_| TwitchError::Storage)?
             .map_err(|_| TwitchError::Storage)?;
     if pending_claim.settled {
-        return Ok(false);
+        return Ok(ClaimOutcome::NotClaimed);
+    }
+    // A settings save can overtake a queued job or its durable intent write.
+    if !pending_claim.confirmed && !app.settings.read().await.auto_claim_drops {
+        return Ok(ClaimOutcome::Disabled);
     }
     let claimed = pending_claim.confirmed || client.claim(&pending_claim.instance).await?;
     let app = app.clone();
@@ -99,7 +110,11 @@ pub(super) async fn claim(
     .await
     .map_err(|_| TwitchError::Storage)?
     .map_err(|_| TwitchError::Storage)?;
-    Ok(claimed)
+    Ok(if claimed {
+        ClaimOutcome::Claimed
+    } else {
+        ClaimOutcome::NotClaimed
+    })
 }
 
 pub(super) fn record_claim(app: &App, claim: &PendingClaim) -> anyhow::Result<()> {
