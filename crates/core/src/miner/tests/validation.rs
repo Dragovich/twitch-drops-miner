@@ -180,9 +180,20 @@ async fn validation_failure_retries_without_resetting_inventory_or_credentials()
 
 #[tokio::test]
 async fn rejected_hourly_token_renews_through_existing_authentication() {
+    use crate::app::activity::{ActivityEvent, Category, Severity};
     let server = MockServer::start().await;
     valid(&server).await;
     let (dir, app, worker) = owner(&server, false).await;
+    app.record_activity(ActivityEvent::new(
+        "gui.backend.twitch_error",
+        Category::Connection,
+        Severity::Warning,
+        &[
+            ("operation", "validation"),
+            ("error", "Twitch connection failed"),
+        ],
+    ))
+    .await;
     let checked = app.snapshot.read().await.inventory_status.checked_at;
     Mock::given(method("GET"))
         .and(path("/oauth2/validate"))
@@ -211,6 +222,13 @@ async fn rejected_hourly_token_renews_through_existing_authentication() {
         "newtoken"
     );
     assert_eq!(app.snapshot.read().await.login.user_id, Some(42));
+    assert!(app.snapshot.read().await.activity.iter().any(|event| {
+        event
+            .args
+            .get("operation")
+            .is_some_and(|operation| operation == "validation")
+            && event.recovered
+    }));
     assert_eq!(calls(&server, "/oauth2/device").await, 0);
     let requests = server.received_requests().await.unwrap();
     let renewed = requests
@@ -301,5 +319,54 @@ async fn logout_and_shutdown_cancel_inflight_validation_without_late_credential_
         assert_eq!(Session::load(dir.path()).unwrap().is_none(), logout);
         assert_eq!(calls(&server, "/oauth2/token").await, 0);
         assert_eq!(calls(&server, "Inventory").await, 2);
+    }
+}
+
+#[tokio::test]
+async fn validation_and_shutdown_wait_for_inflight_history_writes() {
+    for renew in [false, true] {
+        let server = MockServer::start().await;
+        valid(&server).await;
+        let (dir, app, worker) = owner(&server, false).await;
+        let mut campaign = campaign_json("claimed");
+        campaign["timeBasedDrops"][0]["self"]["isClaimed"] = true.into();
+        Mock::given(method("POST")).and(path("/gql"))
+            .and(body_string_contains("Inventory"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data":{"currentUser":{"inventory":{"dropCampaignsInProgress":[campaign],"gameEventDrops":[]}}}
+            }))).with_priority(1).mount(&server).await;
+        let history = app.history.lock().await;
+        app.command(Command::Refresh { clear_cache: false })
+            .await
+            .unwrap();
+        wait_calls(&server, "Inventory", 2).await;
+        // Let the local response reach the blocking history transaction held above.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if renew {
+            Mock::given(method("GET"))
+                .and(path("/oauth2/validate"))
+                .respond_with(
+                    ResponseTemplate::new(401)
+                        .set_body_json(json!({"status":401,"message":"invalid token"})),
+                )
+                .with_priority(1)
+                .mount(&server)
+                .await;
+            advance(3601).await;
+            wait_calls(&server, "/oauth2/validate", 2).await;
+        } else {
+            app.shutdown.cancel();
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let exited_early = worker.is_finished();
+        let renewed_early = calls(&server, "/oauth2/validate").await > 2;
+        drop(history);
+        stop(&app, worker).await;
+        assert!(!exited_early, "shutdown detached a durable write");
+        assert!(
+            !renewed_early,
+            "token renewal started before the prior write finished"
+        );
+        assert_eq!(History::load(dir.path()).total(), 1);
     }
 }

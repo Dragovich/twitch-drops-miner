@@ -183,15 +183,17 @@ pub(super) async fn publish_login(app: &App, mut login: Login) {
     }
     if login.user_id.is_some() {
         use crate::app::activity::{self, ActivityEvent, Category, Severity};
-        activity::recover(
-            &mut state,
-            &ActivityEvent::new(
-                "gui.backend.twitch_error",
-                Category::Connection,
-                Severity::Info,
-                &[],
-            ),
+        let mut recovery = ActivityEvent::new(
+            "gui.backend.twitch_error",
+            Category::Connection,
+            Severity::Info,
+            &[],
         );
+        activity::recover(&mut state, &recovery);
+        recovery
+            .args
+            .insert("operation".into(), "validation".into());
+        activity::recover(&mut state, &recovery);
     }
     state.login = login;
 }
@@ -338,14 +340,27 @@ pub(super) async fn run_generation(
         mining.restore(&saved);
     }
     let result = {
-        // These reads belong to the generation and never block the watch loop.
+        let run = mining.run(&mut pool);
+        tokio::pin!(run);
+        let reads = async {
+            tokio::select! { biased;
+                _ = cancel.cancelled() => Err(TwitchError::Cancelled),
+                result = validation => result,
+                result = profile => result,
+                result = directory => result,
+            }
+        };
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => Err(TwitchError::Cancelled),
-            result = validation => result,
-            result = mining.run(&mut pool) => result,
-            result = profile => result,
-            result = directory => result,
+            result = &mut run => result,
+            result = reads => {
+                cancel.cancel();
+                // Mining may be awaiting durable writes outside its job set.
+                match run.await {
+                    Err(error) if error != TwitchError::Cancelled => Err(error),
+                    _ => result,
+                }
+            },
         }
     };
     *resume.lock().await = mining.resume();
