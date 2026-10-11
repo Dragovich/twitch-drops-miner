@@ -4706,28 +4706,55 @@ async fn claim_receipts_prune_only_after_durable_recovery_and_read_legacy_record
 
 #[tokio::test]
 async fn inventory_recovery_before_claim_completion_preserves_evidence_and_first_notification() {
-    let server = MockServer::start().await;
-    gql_mock(
-        &server,
-        |_| json!({"data":{"claimDropRewards":{"status":"ELIGIBLE_FOR_ALL"}}}),
-    )
-    .await;
-    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
-    let mut notifications = miner.app.notifications.subscribe();
-    miner.campaigns[0].drops[0].claim_id = Some("instance".into());
-    miner.schedule(&Settings::default()).await;
-    let completed = miner.jobs.join_next().await.unwrap().unwrap();
-    let fresh_at = Utc::now();
-    miner.campaigns[0].drops[0].confirmed_at = Some(fresh_at);
-    miner.recover_claims(&HashMap::new()).await.unwrap();
-    assert!(!miner.campaigns[0].drops[0].claimed);
-    miner.busy.remove(&completed.kind);
-    miner.complete(completed.job, &pool).await.unwrap();
-    assert!(!miner.campaigns[0].drops[0].claimed);
-    assert_eq!(miner.campaigns[0].drops[0].confirmed_at, Some(fresh_at));
-    assert!(notifications.try_recv().is_ok());
-    miner.schedule(&Settings::default()).await;
-    assert!(!miner.busy.contains(&JobKind::Claim));
-    assert!(notifications.try_recv().is_err());
-    pool.close().await;
+    for fresh_request in [false, true] {
+        let server = MockServer::start().await;
+        gql_mock(
+            &server,
+            |_| json!({"data":{"claimDropRewards":{"status":"ELIGIBLE_FOR_ALL"}}}),
+        )
+        .await;
+        let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+        let mut notifications = miner.app.notifications.subscribe();
+        miner.campaigns[0].drops[0].claim_id = Some("instance".into());
+        miner.schedule(&Settings::default()).await;
+        let completed = miner.jobs.join_next().await.unwrap().unwrap();
+        let fresh_at = Utc::now();
+        let mut fresh = miner.campaigns[0].clone();
+        fresh.drops[0].confirmed_at = Some(fresh_at);
+        miner
+            .complete(
+                Job::Inventory {
+                    requested_at: if fresh_request {
+                        fresh_at
+                    } else {
+                        fresh_at - chrono::Duration::hours(1)
+                    },
+                    refresh_sequence: 0,
+                    result: Ok(Inventory {
+                        campaigns: vec![fresh],
+                        status: InventoryStatus {
+                            available: true,
+                            ..Default::default()
+                        },
+                        awards: HashMap::new(),
+                        rejected_account_ids: HashSet::new(),
+                    }),
+                },
+                &pool,
+            )
+            .await
+            .unwrap();
+        assert_eq!(miner.campaigns[0].drops[0].claimed, !fresh_request);
+        miner.busy.remove(&completed.kind);
+        miner.complete(completed.job, &pool).await.unwrap();
+        assert_eq!(miner.campaigns[0].drops[0].claimed, !fresh_request);
+        if fresh_request {
+            assert_eq!(miner.campaigns[0].drops[0].confirmed_at, Some(fresh_at));
+        }
+        assert!(notifications.try_recv().is_ok());
+        miner.schedule(&Settings::default()).await;
+        assert!(!miner.busy.contains(&JobKind::Claim));
+        assert!(notifications.try_recv().is_err());
+        pool.close().await;
+    }
 }

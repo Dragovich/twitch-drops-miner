@@ -47,7 +47,10 @@ impl Mining {
         self.pending_claims = pending;
         for drop in self.campaigns.iter_mut().flat_map(|c| &mut c.drops) {
             if let Some(at) = recovered.get(&drop.id)
-                && drop.confirmed_at.is_none_or(|confirmed| confirmed <= *at)
+                && self
+                    .unclaimed_inventory
+                    .get(&drop.id)
+                    .is_none_or(|confirmed| *confirmed <= *at)
             {
                 drop.mark_claimed(*at);
             }

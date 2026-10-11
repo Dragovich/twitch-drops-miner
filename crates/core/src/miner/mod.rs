@@ -197,6 +197,7 @@ struct Mining {
     next_transition: Option<chrono::DateTime<Utc>>,
     pending_claims: Vec<PendingClaim>,
     rejected_account_ids: HashSet<String>,
+    unclaimed_inventory: HashMap<String, chrono::DateTime<Utc>>,
 }
 impl Mining {
     fn restore(&mut self, saved: &Resume) {
@@ -302,6 +303,7 @@ impl Mining {
             next_transition: None,
             pending_claims: vec![],
             rejected_account_ids: HashSet::new(),
+            unclaimed_inventory: HashMap::new(),
         }
     }
     fn spawn(&mut self, kind: JobKind, future: impl Future<Output = Job> + Send + 'static) {
@@ -384,6 +386,7 @@ impl Mining {
             self.epoch = self.epoch.wrapping_add(1);
             self.campaigns.clear();
             self.rejected_account_ids.clear();
+            self.unclaimed_inventory.clear();
             self.channels.clear();
             self.channels_loaded = false;
             self.watching = None;
@@ -800,6 +803,21 @@ impl Mining {
             } => {
                 for campaign in &mut inventory.campaigns {
                     for drop in &mut campaign.drops {
+                        // Only fresh account records can contradict an acknowledged claim.
+                        if drop.confirmed_at.is_some() {
+                            if !drop.claimed {
+                                self.unclaimed_inventory
+                                    .entry(drop.id.clone())
+                                    .and_modify(|at| *at = (*at).max(requested_at))
+                                    .or_insert(requested_at);
+                            } else if self
+                                .unclaimed_inventory
+                                .get(&drop.id)
+                                .is_some_and(|at| *at <= requested_at)
+                            {
+                                self.unclaimed_inventory.remove(&drop.id);
+                            }
+                        }
                         if let Some(previous) = self
                             .campaigns
                             .iter()
@@ -833,6 +851,12 @@ impl Mining {
                         }
                     }
                 }
+                self.unclaimed_inventory.retain(|id, _| {
+                    inventory
+                        .campaigns
+                        .iter()
+                        .any(|c| c.drops.iter().any(|d| &d.id == id))
+                });
                 self.campaigns = inventory.campaigns;
                 self.status = inventory.status;
                 self.rejected_account_ids = inventory.rejected_account_ids;
@@ -1033,7 +1057,11 @@ impl Mining {
                     .flat_map(|c| &mut c.drops)
                     .find(|d| d.id == id)
                 {
-                    if drop.confirmed_at.is_none_or(|at| at <= attempted_at) {
+                    if self
+                        .unclaimed_inventory
+                        .get(&id)
+                        .is_none_or(|at| *at <= attempted_at)
+                    {
                         drop.mark_claimed(attempted_at);
                     }
                     let mut event = crate::app::activity::ActivityEvent::new(
