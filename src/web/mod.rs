@@ -161,6 +161,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/console", get(console))
         .route("/api/settings", get(settings).post(update_settings))
         .route("/api/telegram", get(telegram).post(save_telegram))
+        .route("/api/telegram/bot", get(telegram_bot))
         .route("/api/telegram/test", post(test_telegram))
         .route("/api/games", post(games))
         .route("/api/settings/verify-proxy", post(verify_proxy))
@@ -506,6 +507,11 @@ async fn save_telegram(
 ) -> Result<Json<twitch_drops_miner_core::notifications::View>, ApiError> {
     let update = document(request).await?;
     Ok(Json(app.application.save_telegram(update).await?))
+}
+async fn telegram_bot(
+    State(app): State<Arc<App>>,
+) -> Json<twitch_drops_miner_core::notifications::BotView> {
+    Json(app.telegram_bot().await)
 }
 async fn test_telegram(State(app): State<Arc<App>>) -> Result<Json<Value>, ApiError> {
     app.test_telegram().await?;

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { request } from '../../shared/lib/api';
+import { mdiContentSave, mdiDeleteOutline, mdiOpenInNew } from '@mdi/js';
+import { Icon } from '@mdi/react';
+import { ApiError, request } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
 import {
   ActionResult,
@@ -8,23 +10,32 @@ import {
   Field,
   HelpButton,
   Input,
+  IconButton,
   Notice,
   useAction,
 } from '../../shared/ui';
 
 interface Configuration {
   enabled: boolean;
+  include_image: boolean;
   token_configured: boolean;
   chat_id: string;
   revision: string;
   unreadable: boolean;
 }
 
+interface BotIdentity {
+  revision: string;
+  bot: { name: string; username: string } | null;
+}
+
 export default function Telegram({ connected }: { connected: boolean }) {
   const t = useT();
   const action = useAction();
   const [saved, setSaved] = useState<Configuration>();
+  const [identity, setIdentity] = useState<BotIdentity>();
   const [enabled, setEnabled] = useState(false);
+  const [includeImage, setIncludeImage] = useState(false);
   const [chat, setChat] = useState('');
   const [token, setToken] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
@@ -39,6 +50,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
         if (controller.signal.aborted) return;
         setSaved(value);
         setEnabled(value.enabled);
+        setIncludeImage(value.include_image);
         setChat(value.chat_id);
       })
       .catch(() => {
@@ -46,28 +58,63 @@ export default function Telegram({ connected }: { connected: boolean }) {
       });
     return () => controller.abort();
   }, [reload]);
-  const dirty = !!saved && (enabled !== saved.enabled || chat !== saved.chat_id || token !== '');
+  useEffect(() => {
+    if (!saved?.token_configured || !connected) return;
+    const controller = new AbortController();
+    void request<BotIdentity>('/api/telegram/bot', undefined, 'GET', controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) setIdentity(value);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [saved?.revision, saved?.token_configured, connected]);
+  const bot = !token && identity?.revision === saved?.revision ? identity?.bot : undefined;
+  const dirty =
+    !!saved &&
+    (enabled !== saved.enabled ||
+      includeImage !== saved.include_image ||
+      chat !== saved.chat_id ||
+      token !== '');
   async function save(remove = false) {
     if (!saved) return;
     await action.run(async () => {
       const value = await request<Configuration>('/api/telegram', {
         revision: saved.revision,
         enabled,
+        include_image: includeImage,
         chat_id: chat,
         token,
         remove,
+      }).catch((error: unknown) => {
+        if (error instanceof ApiError && error.message === 'settings_conflict')
+          throw new ApiError(error.status, 'telegram_conflict');
+        throw error;
       });
       setSaved(value);
       setEnabled(value.enabled);
+      setIncludeImage(value.include_image);
       setChat(value.chat_id);
       setToken('');
-    }, t('telegram_saved'));
+    });
   }
   return (
     <section id="notifications" className="max-w-md space-y-4">
       <div className="flex items-center gap-1">
         <h2 className="font-semibold">Telegram</h2>
         <HelpButton label="Telegram" text={t('telegram_help')} />
+        {bot && (
+          <a
+            href={`https://t.me/${encodeURIComponent(bot.username)}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t('telegram_open_bot', { name: bot.name })}
+            title={`@${bot.username}`}
+            className="ml-auto inline-flex min-w-0 max-w-[60%] items-center gap-1 text-muted hover:text-text"
+          >
+            <span className="truncate underline underline-offset-4">{bot.name}</span>
+            <Icon path={mdiOpenInNew} className="mdi-icon" />
+          </a>
+        )}
       </div>
       {loadFailed ? (
         <Notice error>{t('gui.auth.request_failed')}</Notice>
@@ -95,6 +142,14 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 setEnabled(value);
               }}
             />
+            <Check
+              label={t('telegram_include_image')}
+              checked={includeImage}
+              onChange={(value) => {
+                action.clear();
+                setIncludeImage(value);
+              }}
+            />
             <Field label={t('telegram_bot_token')}>
               <Input
                 type="password"
@@ -120,8 +175,9 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 }}
               />
             </Field>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" primary disabled={!dirty}>
+                <Icon path={mdiContentSave} className="mdi-icon" />
                 {t('telegram_save')}
               </Button>
               <Button
@@ -133,23 +189,15 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 {t('telegram_test')}
               </Button>
               {saved.token_configured && (
-                <Button onClick={() => void save(true)}>{t('telegram_remove')}</Button>
+                <IconButton
+                  path={mdiDeleteOutline}
+                  label={t('telegram_remove')}
+                  onClick={() => void save(true)}
+                />
               )}
             </div>
           </fieldset>
           <ActionResult action={action} />
-          {action.error && (
-            <Button
-              className="mt-3"
-              disabled={action.busy}
-              onClick={() => {
-                action.clear();
-                setReload((value) => value + 1);
-              }}
-            >
-              {t('telegram_reload')}
-            </Button>
-          )}
         </form>
       )}
     </section>
