@@ -1053,10 +1053,9 @@ impl Mining {
                     .iter()
                     .find(|c| c.drops.iter().any(|d| d.id == id))
                     && let Some(drop) = campaign.drops.iter().find(|d| d.id == id)
+                    && announce
                 {
-                    if announce {
-                        self.app.notify_claimed(self.client.user_id, campaign, drop);
-                    }
+                    self.app.notify_claimed(self.client.user_id, campaign, drop);
                 }
                 self.claim_retry.remove(&id);
                 self.claim_wait = Some((id, now + Duration::from_secs(4), 0));
