@@ -263,8 +263,11 @@ embed it and run without a build tool/runtime companion. Production builds never
 - Claims require account-issued instance IDs, skip upcoming campaigns and stop at the strict
   campaign-end + 24-hour deadline. Earned claims are independent of mining/ignore selection.
   Persist the account-scoped intent before RPC, then its success receipt and history. Keep the
-  receipt until the owner acknowledges domain state and archives completion; reconcile after
-  restart even without catalog metadata. Never retire it before durable history/archive writes.
+  receipt through the claim window after durable history/archive recovery. Settled receipts
+  suppress the same account/drop/instance across refresh, restart and cache clear without
+  overriding fresh unclaimed inventory. A new instance or an explicit false-to-true account
+  linkage permits another attempt, without repeating the reward announcement. Recover unfinished
+  writes even without catalog metadata; prune settled receipts only at the strict claim deadline.
 - History imports Twitch-confirmed claims during inventory refresh, independent of mining
   selection and reward type. Require account claim state or complete in-window award evidence;
   stale local progress must not override newer award evidence. Deduplicate by drop ID and use

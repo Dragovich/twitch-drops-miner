@@ -261,6 +261,10 @@ pub struct PendingClaim {
     pub retry_until: DateTime<Utc>,
     pub completed_campaign: Option<StoredCampaign>,
     pub confirmed: bool,
+    #[serde(default)]
+    pub settled: bool,
+    #[serde(default)]
+    pub linked: Option<bool>,
 }
 
 impl PendingClaim {
@@ -284,6 +288,8 @@ impl PendingClaim {
             retry_until: campaign.ends_at + chrono::Duration::hours(24),
             completed_campaign: completed.finished.then(|| completed.into()),
             confirmed: false,
+            settled: false,
+            linked: campaign.linked,
         }
     }
 
@@ -307,6 +313,7 @@ impl ClaimJournal {
         let path = directory.join("pending_claims.json");
         let entries = read_json::<Vec<PendingClaim>>(&path)?.unwrap_or_default();
         let mut ids = std::collections::HashSet::new();
+        let mut pending_ids = std::collections::HashSet::new();
         if entries.iter().any(|claim| {
             claim.user_id == 0
                 || claim.entry.id.is_empty()
@@ -315,7 +322,14 @@ impl ClaimJournal {
                 || claim.completed_campaign.as_ref().is_some_and(|c| {
                     c.id != claim.entry.campaign_id || !CampaignArchive::valid(&c.clone().into())
                 })
-                || !ids.insert((claim.user_id, &claim.entry.id))
+                || (!claim.settled && !pending_ids.insert((claim.user_id, &claim.entry.id)))
+                || (claim.settled && !claim.confirmed)
+                || !ids.insert((
+                    claim.user_id,
+                    &claim.entry.id,
+                    &claim.instance,
+                    claim.linked,
+                ))
         }) {
             bail!("pending claims are unreadable; original file preserved");
         }
@@ -324,16 +338,18 @@ impl ClaimJournal {
     pub fn pending(&self, user_id: u64) -> Vec<PendingClaim> {
         self.entries
             .iter()
-            .filter(|e| e.user_id == user_id)
+            .filter(|e| e.user_id == user_id && !e.settled)
             .cloned()
             .collect()
     }
     pub fn prepare(&mut self, claim: PendingClaim) -> Result<PendingClaim> {
-        if let Some(existing) = self
-            .entries
-            .iter()
-            .find(|e| e.user_id == claim.user_id && e.entry.id == claim.entry.id)
-        {
+        if let Some(existing) = self.entries.iter().find(|e| {
+            e.user_id == claim.user_id
+                && e.entry.id == claim.entry.id
+                && (!e.settled
+                    || (e.instance == claim.instance
+                        && !(e.linked == Some(false) && claim.linked == Some(true))))
+        }) {
             return Ok(existing.clone());
         }
         let mut entries = self.entries.clone();
@@ -346,18 +362,57 @@ impl ClaimJournal {
         let mut entries = self.entries.clone();
         let entry = entries
             .iter_mut()
-            .find(|p| p.user_id == user_id && p.entry.id == id)
+            .find(|p| p.user_id == user_id && p.entry.id == id && !p.settled)
             .context("claim intent is missing")?;
         entry.confirmed = true;
         atomic_json(&self.path, &entries)?;
         self.entries = entries;
         Ok(())
     }
+    pub fn acknowledged(&self, user_id: u64, drop: &Drop, linked: Option<bool>) -> bool {
+        self.entries.iter().any(|e| {
+            e.user_id == user_id
+                && e.entry.id == drop.id
+                && e.settled
+                && drop.claim_id.as_deref() == Some(e.instance.as_str())
+                && !(e.linked == Some(false) && linked == Some(true))
+        })
+    }
+    pub fn settled(&self, user_id: u64, id: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.user_id == user_id && e.entry.id == id && e.settled)
+    }
+    pub fn settle(&mut self, user_id: u64, id: &str) -> Result<()> {
+        let mut entries = self.entries.clone();
+        let entry = entries
+            .iter_mut()
+            .find(|e| e.user_id == user_id && e.entry.id == id && !e.settled)
+            .context("claim intent is missing")?;
+        entry.confirmed = true;
+        entry.settled = true;
+        atomic_json(&self.path, &entries)?;
+        self.entries = entries;
+        Ok(())
+    }
+    pub fn prune(&mut self, now: DateTime<Utc>) -> Result<()> {
+        let entries: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|e| !e.settled || now < e.retry_until)
+            .cloned()
+            .collect();
+        if entries.len() != self.entries.len() {
+            atomic_json(&self.path, &entries)?;
+            self.entries = entries;
+        }
+        Ok(())
+    }
     pub fn finish(&mut self, user_id: u64, id: &str) -> Result<()> {
         let entries: Vec<_> = self
             .entries
             .iter()
-            .filter(|e| e.user_id != user_id || e.entry.id != id)
+            .filter(|e| e.user_id != user_id || e.entry.id != id || e.settled)
             .cloned()
             .collect();
         if entries.len() == self.entries.len() {
