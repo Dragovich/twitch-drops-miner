@@ -28,6 +28,8 @@ use crate::{
 #[serde(deny_unknown_fields)]
 struct Config {
     enabled: bool,
+    #[serde(default)]
+    include_image: bool,
     token: String,
     chat_id: String,
 }
@@ -35,6 +37,7 @@ struct Config {
 #[derive(Clone, Serialize)]
 pub struct View {
     pub enabled: bool,
+    pub include_image: bool,
     pub token_configured: bool,
     pub chat_id: String,
     pub revision: String,
@@ -47,6 +50,8 @@ pub struct Update {
     pub revision: String,
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub include_image: bool,
     #[serde(default)]
     pub token: String,
     #[serde(default)]
@@ -100,6 +105,7 @@ pub struct Claim {
     pub game: String,
     pub campaign: String,
     pub reward: String,
+    pub image_url: String,
     pub epoch: u64,
 }
 
@@ -142,6 +148,21 @@ impl Config {
     }
 }
 
+fn preview_url(image: &str) -> Option<String> {
+    if image.len() > 2048 {
+        return None;
+    }
+    let url = url::Url::parse(image).ok()?;
+    (url.scheme() == "https"
+        && url.host_str() == Some("static-cdn.jtvnw.net")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none())
+    .then(|| url.to_string())
+}
+
 impl Telegram {
     pub fn open(directory: &std::path::Path) -> anyhow::Result<Self> {
         let path = directory.join("telegram.json");
@@ -173,6 +194,7 @@ impl Telegram {
         let state = self.state.lock().unwrap();
         View {
             enabled: state.config.enabled,
+            include_image: state.config.include_image,
             token_configured: !state.config.token.is_empty(),
             chat_id: state.config.chat_id.clone(),
             revision: state.revision.clone(),
@@ -210,6 +232,7 @@ impl Telegram {
         } else {
             Config {
                 enabled: update.enabled,
+                include_image: update.include_image,
                 token: if update.token.is_empty() {
                     state.config.token.clone()
                 } else {
@@ -261,6 +284,7 @@ impl Telegram {
         proxy: &str,
         shutdown: &CancellationToken,
         test: bool,
+        image: Option<&str>,
     ) -> Result<(), Error> {
         if self.delivery.is_closed() {
             return Err(Error::Disabled);
@@ -290,12 +314,15 @@ impl Telegram {
             let next = self.state.lock().unwrap().next_send;
             tokio::time::sleep_until(next).await;
             let client = self.client(proxy)?;
+            let preview = image.filter(|_| config.include_image).and_then(preview_url)
+                .map(|url| serde_json::json!({"url":url, "prefer_small_media":true, "show_above_text":false}))
+                .unwrap_or_else(|| serde_json::json!({"is_disabled":true}));
             for attempt in 0..2 {
                 self.state.lock().unwrap().next_send = Instant::now() + Duration::from_secs(3);
                 // The token is in the URL: never format reqwest errors or response bodies.
                 let mut response = client.post(format!("{}/bot{}/sendMessage", self.endpoint, config.token))
                     .json(&serde_json::json!({"chat_id":config.chat_id, "text": text.chars().take(1500).collect::<String>(),
-                        "link_preview_options":{"is_disabled":true}}))
+                        "link_preview_options":preview}))
                     .send().await.map_err(|_| Error::Delivery)?;
                 let status = response.status().as_u16();
                 if status == 401 {
@@ -376,6 +403,7 @@ impl Application {
                 &proxy,
                 &self.shutdown,
                 true,
+                None,
             )
             .await;
         if result.is_ok() {
@@ -420,7 +448,14 @@ pub async fn run(app: Arc<Application>, mut events: broadcast::Receiver<Notifica
         );
         let result = app
             .telegram
-            .send(claim.epoch, &text, &proxy, &app.shutdown, false)
+            .send(
+                claim.epoch,
+                &text,
+                &proxy,
+                &app.shutdown,
+                false,
+                Some(&claim.image_url),
+            )
             .await;
         report(&app, result).await;
     }

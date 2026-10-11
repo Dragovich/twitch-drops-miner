@@ -9,6 +9,7 @@ fn update(service: &Telegram) -> Update {
     Update {
         revision: service.view().revision,
         enabled: true,
+        include_image: false,
         token: "123:secret_token".into(),
         chat_id: "42".into(),
         remove: false,
@@ -31,7 +32,8 @@ async fn offline_fixture_cannot_deliver_even_after_configuration_changes() {
                     "offline",
                     "",
                     &CancellationToken::new(),
-                    test
+                    test,
+                    None,
                 )
                 .await,
             Err(Error::Disabled)
@@ -46,6 +48,7 @@ async fn private_config_preserves_tokens_and_rejects_stale_or_invalid_updates() 
     let (app, _) = Application::open(dir.path().into()).unwrap();
     let old = app.telegram.view();
     assert!(!old.enabled);
+    assert!(!old.include_image);
     let saved = app.save_telegram(update(&app.telegram)).await.unwrap();
     let public = serde_json::to_string(&saved).unwrap();
     assert!(!public.contains("secret_token"));
@@ -58,8 +61,10 @@ async fn private_config_preserves_tokens_and_rejects_stale_or_invalid_updates() 
     let mut changed = update(&app.telegram);
     changed.token.clear();
     changed.chat_id = "-1234".into();
+    changed.include_image = true;
     app.save_telegram(changed).await.unwrap();
     let loaded = Telegram::open(dir.path()).unwrap();
+    assert!(loaded.view().include_image);
     assert_eq!(
         loaded.state.lock().unwrap().config.token,
         "123:secret_token"
@@ -77,6 +82,7 @@ async fn private_config_preserves_tokens_and_rejects_stale_or_invalid_updates() 
     removed.remove = true;
     let view = app.save_telegram(removed).await.unwrap();
     assert!(!view.enabled && !view.token_configured && view.chat_id.is_empty());
+    assert!(!view.include_image);
 }
 
 #[test]
@@ -130,6 +136,7 @@ async fn sends_plain_text_without_twitch_credentials_and_checks_api_success() {
             "",
             &CancellationToken::new(),
             false,
+            None,
         )
         .await
         .unwrap();
@@ -157,6 +164,7 @@ async fn sends_plain_text_without_twitch_credentials_and_checks_api_success() {
             "",
             &CancellationToken::new(),
             false,
+            None,
         )
         .await
         .unwrap_err();
@@ -170,7 +178,9 @@ async fn test_delivery_does_not_discard_claims_and_clears_old_errors() {
     let dir = tempfile::tempdir().unwrap();
     let (mut app, _) = Application::open(dir.path().into()).unwrap();
     Arc::get_mut(&mut app).unwrap().telegram.endpoint = server.uri();
-    app.save_telegram(update(&app.telegram)).await.unwrap();
+    let mut config = update(&app.telegram);
+    config.include_image = true;
+    app.save_telegram(config).await.unwrap();
     app.snapshot.write().await.login.user_id = Some(1);
     Mock::given(method("POST"))
         .respond_with(
@@ -205,6 +215,7 @@ async fn test_delivery_does_not_discard_claims_and_clears_old_errors() {
             game: "Game".into(),
             campaign: "Campaign".into(),
             reward: "Reward".into(),
+            image_url: "https://static-cdn.jtvnw.net/reward.png".into(),
             epoch: app.telegram.epoch(),
         }),
     };
@@ -267,7 +278,8 @@ async fn rejected_and_ambiguous_responses_are_not_retried_or_followed() {
                     "test",
                     "",
                     &CancellationToken::new(),
-                    false
+                    false,
+                    None,
                 )
                 .await,
             Err(expected)
@@ -300,6 +312,7 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
             "",
             &CancellationToken::new(),
             false,
+            None,
         )
         .await
         .unwrap();
@@ -308,7 +321,7 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
     service.cancel_pending();
     assert_eq!(
         service
-            .send(epoch, "stale", "", &CancellationToken::new(), false)
+            .send(epoch, "stale", "", &CancellationToken::new(), false, None)
             .await,
         Err(Error::Cancelled)
     );
@@ -319,7 +332,7 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
         .await;
     service.state.lock().unwrap().next_send = Instant::now();
     let cancel = CancellationToken::new();
-    let send = service.send(service.epoch(), "test", "", &cancel, false);
+    let send = service.send(service.epoch(), "test", "", &cancel, false, None);
     tokio::pin!(send);
     tokio::select! { result = &mut send => panic!("completed early: {result:?}"), _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
     service.save(update(&service)).unwrap();
@@ -337,7 +350,9 @@ async fn worker_deduplicates_claims_and_never_exposes_internal_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let (mut app, _) = Application::open(dir.path().into()).unwrap();
     Arc::get_mut(&mut app).unwrap().telegram.endpoint = server.uri();
-    app.save_telegram(update(&app.telegram)).await.unwrap();
+    let mut config = update(&app.telegram);
+    config.include_image = true;
+    app.save_telegram(config).await.unwrap();
     app.snapshot.write().await.login.user_id = Some(1);
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true})))
@@ -354,6 +369,7 @@ async fn worker_deduplicates_claims_and_never_exposes_internal_metadata() {
             game: "Game".into(),
             campaign: "Campaign".into(),
             reward: "Reward".into(),
+            image_url: "https://static-cdn.jtvnw.net/reward.png".into(),
             epoch: app.telegram.epoch(),
         }),
     };
@@ -373,5 +389,115 @@ async fn worker_deduplicates_claims_and_never_exposes_internal_metadata() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     app.shutdown.cancel();
     worker.await.unwrap();
-    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+    assert_eq!(
+        body["text"],
+        "Drop claimed\nGame \u{2014} Campaign\nReward: Reward"
+    );
+    assert_eq!(
+        body["link_preview_options"]["url"],
+        "https://static-cdn.jtvnw.net/reward.png"
+    );
+}
+
+#[test]
+fn existing_telegram_config_defaults_to_text_only() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("telegram.json"),
+        serde_json::to_vec(&json!({"enabled":true,"token":"123:secret","chat_id":"42"})).unwrap(),
+    )
+    .unwrap();
+    let service = Telegram::open(dir.path()).unwrap();
+    assert!(service.view().enabled);
+    assert!(!service.view().unreadable);
+    assert!(!service.view().include_image);
+}
+
+#[tokio::test]
+async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_artwork() {
+    let server = MockServer::start().await;
+    let (_dir, service) = configured(&server).await;
+    let artwork = "https://static-cdn.jtvnw.net/twitch-quests-assets/REWARD/reward.png";
+    for (enabled, image, expected) in [
+        (false, Some(artwork), false),
+        (true, Some(artwork), true),
+        (true, None, false),
+        (true, Some(""), false),
+        (true, Some("http://static-cdn.jtvnw.net/reward.png"), false),
+        (
+            true,
+            Some("https://static-cdn.jtvnw.net.evil.test/reward.png"),
+            false,
+        ),
+        (
+            true,
+            Some("https://user:secret@static-cdn.jtvnw.net/reward.png"),
+            false,
+        ),
+        (
+            true,
+            Some("https://static-cdn.jtvnw.net/reward.png?token=secret"),
+            false,
+        ),
+        (
+            true,
+            Some("https://static-cdn.jtvnw.net/reward.png#secret"),
+            false,
+        ),
+        (
+            true,
+            Some("https://static-cdn.jtvnw.net:8443/reward.png"),
+            false,
+        ),
+        (true, Some("https://127.0.0.1/reward.png"), false),
+    ] {
+        server.reset().await;
+        Mock::given(method("POST"))
+            .and(path("/bot123:secret_token/sendMessage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true})))
+            .mount(&server)
+            .await;
+        let mut config = update(&service);
+        config.include_image = enabled;
+        service.save(config).unwrap();
+        service.state.lock().unwrap().next_send = Instant::now();
+        service
+            .send(
+                service.epoch(),
+                "Drop claimed\nGame \u{2014} Campaign\nReward: <Reward>",
+                "",
+                &CancellationToken::new(),
+                false,
+                image,
+            )
+            .await
+            .unwrap();
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+        assert_eq!(
+            body["text"],
+            "Drop claimed\nGame \u{2014} Campaign\nReward: <Reward>"
+        );
+        assert!(body.get("parse_mode").is_none());
+        assert!(body.get("reply_markup").is_none());
+        assert_eq!(
+            body["link_preview_options"],
+            if expected {
+                json!({"url":artwork,"prefer_small_media":true,"show_above_text":false})
+            } else {
+                json!({"is_disabled":true})
+            }
+        );
+    }
+    assert!(
+        preview_url(&format!(
+            "https://static-cdn.jtvnw.net/{}",
+            "x".repeat(2048)
+        ))
+        .is_none()
+    );
 }
