@@ -44,6 +44,18 @@ pub struct View {
     pub unreadable: bool,
 }
 
+#[derive(Clone, Serialize)]
+pub struct Bot {
+    pub name: String,
+    pub username: String,
+}
+
+#[derive(Serialize)]
+pub struct BotView {
+    pub revision: String,
+    pub bot: Option<Bot>,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Update {
@@ -136,6 +148,7 @@ struct State {
     epoch: u64,
     cancel: CancellationToken,
     next_send: Instant,
+    bot: Option<Bot>,
 }
 
 pub struct Telegram {
@@ -143,6 +156,7 @@ pub struct Telegram {
     state: Mutex<State>,
     writes: Arc<Semaphore>,
     delivery: Semaphore,
+    lookup: Semaphore,
     client: Mutex<Option<(String, reqwest::Client)>>,
     endpoint: String,
     failed: AtomicBool,
@@ -201,9 +215,11 @@ impl Telegram {
                 epoch: 0,
                 cancel: CancellationToken::new(),
                 next_send: Instant::now(),
+                bot: None,
             }),
             writes: Arc::new(Semaphore::new(1)),
             delivery: Semaphore::new(1),
+            lookup: Semaphore::new(1),
             client: Mutex::new(None),
             endpoint: "https://api.telegram.org".into(),
             failed: AtomicBool::new(false),
@@ -229,6 +245,7 @@ impl Telegram {
     #[cfg(any(test, feature = "dashboard-fixture"))]
     pub fn disable_for_fixture(&self) {
         self.delivery.close();
+        self.lookup.close();
         self.cancel_pending();
     }
 
@@ -272,6 +289,7 @@ impl Telegram {
         state.cancel = CancellationToken::new();
         state.epoch = state.epoch.wrapping_add(1);
         state.config = config;
+        state.bot = None;
         state.revision = revision;
         drop(state);
         Ok(self.view())
@@ -295,6 +313,77 @@ impl Telegram {
         let client = builder.build().map_err(|_| Error::Delivery)?;
         *cached = Some((proxy.to_owned(), client.clone()));
         Ok(client)
+    }
+
+    async fn bot(&self, proxy: &str, shutdown: &CancellationToken) -> BotView {
+        let (revision, epoch, token, cancel) = {
+            let state = self.state.lock().unwrap();
+            (
+                state.revision.clone(),
+                state.epoch,
+                state.config.token.clone(),
+                state.cancel.clone(),
+            )
+        };
+        let lookup = async {
+            if token.is_empty() {
+                return None;
+            }
+            let _permit = self.lookup.acquire().await.ok()?;
+            {
+                let state = self.state.lock().unwrap();
+                if state.epoch != epoch || state.unreadable {
+                    return None;
+                }
+                if state.bot.is_some() {
+                    return state.bot.clone();
+                }
+            }
+            let expected_id = token.split_once(':')?.0.parse::<u64>().ok()?;
+            // The token is in the URL: never expose transport errors or raw responses.
+            let response = self
+                .client(proxy)
+                .ok()?
+                .get(format!("{}/bot{token}/getMe", self.endpoint))
+                .send()
+                .await
+                .ok()?;
+            if response.status() != reqwest::StatusCode::OK {
+                return None;
+            }
+            let value = response_json(response).await.ok()?;
+            let result = &value["result"];
+            let name = result["first_name"].as_str()?.trim();
+            let username = result["username"].as_str()?;
+            if value["ok"] != true
+                || result["is_bot"] != true
+                || result["id"].as_u64() != Some(expected_id)
+                || name.is_empty()
+                || name.chars().count() > 64
+                || !(5..=32).contains(&username.len())
+                || !username
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            {
+                return None;
+            }
+            let bot = Bot {
+                name: name.into(),
+                username: username.into(),
+            };
+            let mut state = self.state.lock().unwrap();
+            if state.epoch != epoch {
+                return None;
+            }
+            state.bot = Some(bot.clone());
+            Some(bot)
+        };
+        let bot = tokio::select! { biased;
+            _ = shutdown.cancelled() => None,
+            _ = cancel.cancelled() => None,
+            value = tokio::time::timeout(Duration::from_secs(3), lookup) => value.ok().flatten(),
+        };
+        BotView { revision, bot }
     }
 
     async fn send(
@@ -340,7 +429,7 @@ impl Telegram {
             for attempt in 0..2 {
                 self.state.lock().unwrap().next_send = Instant::now() + Duration::from_secs(3);
                 // The token is in the URL: never format reqwest errors or response bodies.
-                let mut response = client.post(format!("{}/bot{}/sendMessage", self.endpoint, config.token))
+                let response = client.post(format!("{}/bot{}/sendMessage", self.endpoint, config.token))
                     .json(&serde_json::json!({"chat_id":config.chat_id, "text": html, "parse_mode":"HTML",
                         "link_preview_options":preview}))
                     .send().await.map_err(|_| Error::Delivery)?;
@@ -351,15 +440,7 @@ impl Telegram {
                 if matches!(status, 400 | 403) {
                     return Err(Error::Chat);
                 }
-                let mut body = Vec::new();
-                while let Some(chunk) = response.chunk().await.map_err(|_| Error::Delivery)? {
-                    if body.len() + chunk.len() > 65536 {
-                        return Err(Error::Delivery);
-                    }
-                    body.extend_from_slice(&chunk);
-                }
-                let value: serde_json::Value =
-                    serde_json::from_slice(&body).map_err(|_| Error::Delivery)?;
+                let value = response_json(response).await?;
                 if status == 200 && value["ok"] == true {
                     return Ok(());
                 }
@@ -383,7 +464,23 @@ impl Telegram {
     }
 }
 
+async fn response_json(mut response: reqwest::Response) -> Result<serde_json::Value, Error> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| Error::Delivery)? {
+        if body.len() + chunk.len() > 65536 {
+            return Err(Error::Delivery);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).map_err(|_| Error::Delivery)
+}
+
 impl Application {
+    pub async fn telegram_bot(&self) -> BotView {
+        let proxy = self.settings.read().await.proxy.clone();
+        self.telegram.bot(&proxy, &self.shutdown).await
+    }
+
     pub async fn save_telegram(
         self: &Arc<Self>,
         update: Update,

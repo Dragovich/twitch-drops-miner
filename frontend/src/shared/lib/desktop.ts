@@ -9,6 +9,7 @@ export function nativeRequest(path: string, data: unknown, method: string) {
     '/api/auth/status': 'auth_status',
     '/api/settings': 'settings',
     '/api/telegram': 'telegram',
+    '/api/telegram/bot': 'telegram_bot',
     '/api/history/stats': 'history_stats',
   };
   const writes: Record<string, string> = {

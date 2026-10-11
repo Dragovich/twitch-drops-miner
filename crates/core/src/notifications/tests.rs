@@ -39,7 +39,163 @@ async fn offline_fixture_cannot_deliver_even_after_configuration_changes() {
             Err(Error::Disabled)
         );
     }
+    assert!(
+        service
+            .bot("", &CancellationToken::new())
+            .await
+            .bot
+            .is_none()
+    );
     assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn bot_lookup_caches_safe_public_identity_without_twitch_credentials() {
+    let server = MockServer::start().await;
+    let (_dir, service) = configured(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/bot123:secret_token/getMe"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"ok":true,"result":{
+                "id":123,"is_bot":true,"first_name":"Drops <&> Miner","username":"drops_miner_bot"
+            }})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let cancel = CancellationToken::new();
+    let (first, second) = tokio::join!(service.bot("", &cancel), service.bot("", &cancel));
+    for view in [first, second] {
+        let public = serde_json::to_value(view).unwrap();
+        assert_eq!(public["revision"], service.view().revision);
+        assert_eq!(
+            public["bot"],
+            json!({"name":"Drops <&> Miner","username":"drops_miner_bot"})
+        );
+        assert!(!public.to_string().contains("secret_token"));
+    }
+    let requests = server.received_requests().await.unwrap();
+    for header in ["authorization", "cookie", "client-id"] {
+        assert!(!requests[0].headers.contains_key(header));
+    }
+    assert!(requests[0].body.is_empty());
+}
+
+#[tokio::test]
+async fn bot_lookup_ignores_invalid_or_failed_responses_without_affecting_saved_settings() {
+    let server = MockServer::start().await;
+    let (_dir, service) = configured(&server).await;
+    let valid = json!({"ok":true,"result":{
+        "id":123,"is_bot":true,"first_name":"Drops Miner","username":"drops_miner_bot"
+    }});
+    let mut responses = vec![
+        ResponseTemplate::new(401),
+        ResponseTemplate::new(302).insert_header("location", "/redirected"),
+        ResponseTemplate::new(200).set_body_string("not JSON"),
+        ResponseTemplate::new(200).set_body_string("x".repeat(65537)),
+    ];
+    for (key, value) in [
+        ("username", json!("../bad")),
+        ("id", json!(456)),
+        ("is_bot", json!(false)),
+        ("first_name", json!("x".repeat(65))),
+    ] {
+        let mut invalid = valid.clone();
+        invalid["result"][key] = value;
+        responses.push(ResponseTemplate::new(200).set_body_json(invalid));
+    }
+    for response in responses {
+        server.reset().await;
+        Mock::given(method("GET"))
+            .and(path("/bot123:secret_token/getMe"))
+            .respond_with(response)
+            .expect(1)
+            .mount(&server)
+            .await;
+        let revision = service.view().revision;
+        assert!(
+            service
+                .bot("", &CancellationToken::new())
+                .await
+                .bot
+                .is_none()
+        );
+        assert_eq!(service.view().revision, revision);
+        assert!(service.view().enabled && service.view().token_configured);
+        assert!(service.state.lock().unwrap().bot.is_none());
+    }
+}
+
+#[tokio::test]
+async fn bot_lookup_cancels_old_tokens_and_shutdown_and_times_out() {
+    let server = MockServer::start().await;
+    let (_dir, service) = configured(&server).await;
+    let service = Arc::new(service);
+    Mock::given(method("GET"))
+        .and(path("/bot123:secret_token/getMe"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"ok":true,"result":{
+                    "id":123,"is_bot":true,"first_name":"Old bot","username":"old_bot"
+                }}))
+                .set_delay(Duration::from_secs(5)),
+        )
+        .mount(&server)
+        .await;
+    let original = service.view().revision;
+    let querying = service.clone();
+    let lookup = tokio::spawn(async move { querying.bot("", &CancellationToken::new()).await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while server.received_requests().await.unwrap().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let mut config = update(&service);
+    config.token = "456:new_token".into();
+    service.save(config).unwrap();
+    let stale = tokio::time::timeout(Duration::from_secs(1), lookup)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stale.revision, original);
+    assert!(stale.bot.is_none());
+    assert!(service.state.lock().unwrap().bot.is_none());
+
+    Mock::given(method("GET"))
+        .and(path("/bot456:new_token/getMe"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"ok":true,"result":{
+                "id":456,"is_bot":true,"first_name":"New bot","username":"new_bot"
+            }})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    assert_eq!(
+        service
+            .bot("", &CancellationToken::new())
+            .await
+            .bot
+            .unwrap()
+            .username,
+        "new_bot"
+    );
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    assert!(service.bot("", &cancel).await.bot.is_none());
+    service.save(update(&service)).unwrap();
+    assert!(
+        tokio::time::timeout(
+            Duration::from_secs(4),
+            service.bot("", &CancellationToken::new())
+        )
+        .await
+        .unwrap()
+        .bot
+        .is_none()
+    );
 }
 
 #[tokio::test]
