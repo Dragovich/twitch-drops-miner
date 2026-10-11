@@ -88,6 +88,33 @@ async fn disabled_auto_claim_keeps_watching_and_inventory_running() {
 }
 
 #[tokio::test]
+async fn disabling_auto_claim_preserves_reminders_with_stale_scheduler_settings() {
+    let server = MockServer::start().await;
+    gql_mock(&server, |q| {
+        assert_eq!(q["operationName"], "OnsiteNotifications_DeleteNotification");
+        assert_eq!(q["variables"]["input"]["id"], "claim-reminder");
+        json!({"data":{"deleteNotification":null}})
+    })
+    .await;
+    let (_dir, mut mining, _intent, mut pool) = miner(&server).await;
+    mining.notifications.insert("claim-reminder".into());
+    let stale = mining.app.settings.read().await.clone();
+    save_auto_claim(&mining, false).await;
+    mining.schedule(&stale).await;
+    assert!(mining.jobs.is_empty());
+    assert!(mining.notifications.contains("claim-reminder"));
+    assert_eq!(gql_requests(&server).await, 0);
+
+    let enabled = save_auto_claim(&mining, true).await;
+    mining.schedule(&enabled).await;
+    assert!(mining.busy.contains(&JobKind::Notification));
+    finish_job(&mut mining, &pool).await;
+    assert!(mining.notifications.is_empty());
+    assert_eq!(gql_requests(&server).await, 1);
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn disabled_auto_claim_preserves_restart_intents_until_reenabled() {
     let server = MockServer::start().await;
     gql_mock(&server, |q| {

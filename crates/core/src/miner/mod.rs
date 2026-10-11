@@ -657,9 +657,8 @@ impl Mining {
             });
             return;
         }
-        if settings.auto_claim_drops
-            && let Some(id) = self.notifications.iter().next().cloned()
-        {
+        let auto_claim_drops = self.app.settings.read().await.auto_claim_drops;
+        if auto_claim_drops && let Some(id) = self.notifications.iter().next().cloned() {
             self.notifications.remove(&id);
             let client = self.client.clone();
             self.spawn(JobKind::Notification, async move {
