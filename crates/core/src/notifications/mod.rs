@@ -109,6 +109,26 @@ pub struct Claim {
     pub epoch: u64,
 }
 
+impl Claim {
+    fn message(&self) -> String {
+        // Bound names before escaping so truncation cannot split HTML tags or entities.
+        let escape = |name: &str| {
+            name.chars()
+                .take(480)
+                .collect::<String>()
+                .replace('&', "&amp;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;")
+        };
+        format!(
+            "<b>Drop claimed</b>\n<b>{}</b> — {}\nReward: <b>{}</b>",
+            escape(&self.game),
+            escape(&self.campaign),
+            escape(&self.reward)
+        )
+    }
+}
+
 struct State {
     config: Config,
     revision: String,
@@ -280,7 +300,7 @@ impl Telegram {
     async fn send(
         &self,
         epoch: u64,
-        text: &str,
+        html: &str,
         proxy: &str,
         shutdown: &CancellationToken,
         test: bool,
@@ -321,7 +341,7 @@ impl Telegram {
                 self.state.lock().unwrap().next_send = Instant::now() + Duration::from_secs(3);
                 // The token is in the URL: never format reqwest errors or response bodies.
                 let mut response = client.post(format!("{}/bot{}/sendMessage", self.endpoint, config.token))
-                    .json(&serde_json::json!({"chat_id":config.chat_id, "text": text.chars().take(1500).collect::<String>(),
+                    .json(&serde_json::json!({"chat_id":config.chat_id, "text": html, "parse_mode":"HTML",
                         "link_preview_options":preview}))
                     .send().await.map_err(|_| Error::Delivery)?;
                 let status = response.status().as_u16();
@@ -442,10 +462,7 @@ pub async fn run(app: Arc<Application>, mut events: broadcast::Receiver<Notifica
             seen.pop_front();
         }
         let proxy = app.settings.read().await.proxy.clone();
-        let text = format!(
-            "Drop claimed\n{} — {}\nReward: {}",
-            claim.game, claim.campaign, claim.reward
-        );
+        let text = claim.message();
         let result = app
             .telegram
             .send(

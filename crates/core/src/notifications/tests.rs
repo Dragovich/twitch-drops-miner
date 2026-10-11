@@ -120,7 +120,7 @@ async fn configured(server: &MockServer) -> (tempfile::TempDir, Telegram) {
 }
 
 #[tokio::test]
-async fn sends_plain_text_without_twitch_credentials_and_checks_api_success() {
+async fn sends_html_without_twitch_credentials_and_checks_api_success() {
     let server = MockServer::start().await;
     let (_dir, service) = configured(&server).await;
     Mock::given(method("POST"))
@@ -132,7 +132,7 @@ async fn sends_plain_text_without_twitch_credentials_and_checks_api_success() {
     service
         .send(
             service.epoch(),
-            "<Reward> & game",
+            "<b>&lt;Reward&gt;</b> &amp; game",
             "",
             &CancellationToken::new(),
             false,
@@ -146,8 +146,8 @@ async fn sends_plain_text_without_twitch_credentials_and_checks_api_success() {
     assert!(!request.headers.contains_key("cookie"));
     assert!(!request.headers.contains_key("client-id"));
     let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
-    assert_eq!(body["text"], "<Reward> & game");
-    assert!(body.get("parse_mode").is_none());
+    assert_eq!(body["text"], "<b>&lt;Reward&gt;</b> &amp; game");
+    assert_eq!(body["parse_mode"], "HTML");
     server.reset().await;
     Mock::given(method("POST"))
         .respond_with(
@@ -394,8 +394,9 @@ async fn worker_deduplicates_claims_and_never_exposes_internal_metadata() {
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
     assert_eq!(
         body["text"],
-        "Drop claimed\nGame \u{2014} Campaign\nReward: Reward"
+        "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>Reward</b>"
     );
+    assert_eq!(body["parse_mode"], "HTML");
     assert_eq!(
         body["link_preview_options"]["url"],
         "https://static-cdn.jtvnw.net/reward.png"
@@ -467,7 +468,7 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
         service
             .send(
                 service.epoch(),
-                "Drop claimed\nGame \u{2014} Campaign\nReward: <Reward>",
+                "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>",
                 "",
                 &CancellationToken::new(),
                 false,
@@ -480,9 +481,9 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
         let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
         assert_eq!(
             body["text"],
-            "Drop claimed\nGame \u{2014} Campaign\nReward: <Reward>"
+            "<b>Drop claimed</b>\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>"
         );
-        assert!(body.get("parse_mode").is_none());
+        assert_eq!(body["parse_mode"], "HTML");
         assert!(body.get("reply_markup").is_none());
         assert_eq!(
             body["link_preview_options"],
@@ -499,5 +500,35 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
             "x".repeat(2048)
         ))
         .is_none()
+    );
+}
+
+#[test]
+fn claim_message_escapes_names_and_bounds_them_before_formatting() {
+    let mut claim = Claim {
+        account: 1,
+        drop_id: "drop".into(),
+        game: "Shakes & Fidget".into(),
+        campaign: "<Campaign> &amp;".into(),
+        reward: "</b>\u{1f3c6}<b>".into(),
+        image_url: String::new(),
+        epoch: 0,
+    };
+    assert_eq!(
+        claim.message(),
+        "<b>Drop claimed</b>\n<b>Shakes &amp; Fidget</b> \u{2014} &lt;Campaign&gt; &amp;amp;\nReward: <b>&lt;/b&gt;\u{1f3c6}&lt;b&gt;</b>"
+    );
+
+    claim.game = "\u{1f3c6}".repeat(2000);
+    claim.campaign = "<".repeat(2000);
+    claim.reward = "&".repeat(2000);
+    assert_eq!(
+        claim.message(),
+        format!(
+            "<b>Drop claimed</b>\n<b>{}</b> \u{2014} {}\nReward: <b>{}</b>",
+            "\u{1f3c6}".repeat(480),
+            "&lt;".repeat(480),
+            "&amp;".repeat(480)
+        )
     );
 }
