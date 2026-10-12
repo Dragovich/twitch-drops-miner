@@ -241,6 +241,7 @@ impl Mining {
                         .and_then(|c| c.game.as_ref())
                         .map(|g| g.name.clone()),
                     channel_name: channel.map(|c| c.identity.name.clone()),
+                    channel_id: channel.map(|c| c.identity.id),
                     expires_at: manual.expires_at.map(|at| {
                         now + chrono::Duration::from_std(
                             at.saturating_duration_since(Instant::now()),

@@ -24,11 +24,17 @@ export async function lookupGames(names: string[], signal: AbortSignal): Promise
   return games;
 }
 
-export function useGameSearch(query: string, connected: boolean, user: number | null | undefined) {
+export function useDirectorySearch<T>(
+  path: '/api/games' | '/api/channels/search',
+  query: string,
+  connected: boolean,
+  user: number | null | undefined,
+) {
   const [attempt, retry] = useState(0);
   const [result, setResult] = useState<{
     query: string;
-    items: GameMetadata[];
+    user: number;
+    items: T[];
     error: boolean;
   } | null>(null);
   const term = query.trim();
@@ -38,23 +44,19 @@ export function useGameSearch(query: string, connected: boolean, user: number | 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const items = await request<GameMetadata[]>(
-          '/api/games',
-          { search: term },
-          'POST',
-          controller.signal,
-        );
-        if (!controller.signal.aborted) setResult({ query: term, items, error: false });
+        const items = await request<T[]>(path, { search: term }, 'POST', controller.signal);
+        if (!controller.signal.aborted) setResult({ query: term, user, items, error: false });
       } catch {
-        if (!controller.signal.aborted) setResult({ query: term, items: [], error: true });
+        if (!controller.signal.aborted) setResult({ query: term, user, items: [], error: true });
       }
     }, 300);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [term, connected, user, attempt]);
-  const current = result?.query === term && connected && user ? result : null;
+  }, [path, term, connected, user, attempt]);
+  const current =
+    result?.query === term && result.user === user && connected && user ? result : null;
   return {
     items: current?.items ?? [],
     loading: !!term && connected && !!user && !current,

@@ -187,6 +187,67 @@ async fn game_directory_requires_dashboard_auth_csrf_and_bounded_queries() {
 }
 
 #[tokio::test]
+async fn channel_search_requires_dashboard_auth_csrf_and_bounded_queries() {
+    let test = TestApp::new("");
+    let cookie = test.enable().await;
+    let headers = [("x-tdm-request", "1")];
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            "",
+            &headers
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            &cookie,
+            &[]
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    for query in [
+        json!({"search":""}),
+        json!({"search":"x".repeat(101)}),
+        json!({"search":"streamer\n"}),
+    ] {
+        assert_eq!(
+            test.call(
+                Method::POST,
+                "/api/channels/search",
+                query,
+                &cookie,
+                &headers
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            &cookie,
+            &headers
+        )
+        .await
+        .0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+}
+
+#[tokio::test]
 async fn refresh_command_failure_is_retryable_and_disconnected_callers_do_not_cancel_accepted_work()
 {
     use crate::dto::RefreshState;

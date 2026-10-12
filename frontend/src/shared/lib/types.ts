@@ -60,7 +60,16 @@ export interface Campaign {
   skipped_drops: number;
   drops: Drop[];
 }
+export interface ChannelSearchResult {
+  id: number;
+  login: string;
+  name: string;
+  avatar_url: string | null;
+  online: boolean;
+  game: string | null;
+}
 export interface Channel {
+  avatar_url?: string | null;
   id: number;
   login?: string;
   name: string;
@@ -166,6 +175,7 @@ export interface WantedGame {
   }[];
 }
 export interface ManualMode {
+  channel_id?: number;
   active: boolean;
   game_name?: string;
   channel_name?: string;
