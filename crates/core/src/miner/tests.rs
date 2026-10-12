@@ -13,6 +13,8 @@ use wiremock::{
     matchers::{method, path},
 };
 
+mod validation;
+
 async fn miner(server: &MockServer) -> (tempfile::TempDir, Mining, watch::Sender<Intent>, PubSub) {
     let dir = tempfile::tempdir().unwrap();
     let (app, _commands) = App::open(dir.path().to_owned()).unwrap();
@@ -4012,7 +4014,7 @@ async fn corrupt_twitch_session_can_reach_fresh_device_login() {
 }
 
 #[tokio::test]
-async fn hourly_token_validation_preserves_manual_choice() {
+async fn hourly_token_validation_preserves_manual_choice_and_inventory_deadline() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/oauth2/validate"))
@@ -4042,14 +4044,18 @@ async fn hourly_token_validation_preserves_manual_choice() {
             {"node":{"id":"b1","broadcaster":{"id":"10","login":"first","displayName":"First"},"game":{"id":"1","name":"Rust"},"viewersCount":100}},
             {"node":{"id":"b2","broadcaster":{"id":"11","login":"second","displayName":"Second"},"game":{"id":"1","name":"Rust"},"viewersCount":50}}
         ]}}}}),
-        "DropCurrentSessionContext"=>json!({"data":{"currentUser":{"dropCurrentSession":{"dropID":"drop-one","currentMinutesWatched":12}}}}),
+        "DropCurrentSessionContext"=>json!({"data":{"currentUser":{"dropCurrentSession":{"channel":{"id":"11"},"dropID":"drop-one","currentMinutesWatched":12}}}}),
         "VideoPlayerStreamInfoOverlayChannel"=>json!({"data":{"user":{"id":"11","displayName":"Second","stream":{"id":"b2"},"broadcastSettings":{"game":{"id":"1","name":"Rust"}}}}}),
         "DropsHighlightService_AvailableDrops"=>json!({"data":{"channel":{"viewerDropCampaigns":[{"id":"one"}]}}}),
         other=>panic!("unexpected operation {other}"),
     }).await;
     let dir = tempfile::tempdir().unwrap();
     let (app, commands) = App::open(dir.path().to_owned()).unwrap();
-    app.settings.write().await.games_to_watch = vec!["Rust".into()];
+    {
+        let mut settings = app.settings.write().await;
+        settings.games_to_watch = vec!["Rust".into()];
+        settings.minimum_refresh_interval_minutes = 1440;
+    }
     session().save(dir.path()).unwrap();
     let owner = Miner {
         app: app.clone(),
@@ -4067,7 +4073,9 @@ async fn hourly_token_validation_preserves_manual_choice() {
     })
     .await
     .unwrap();
-    app.command(Command::SelectChannel(11, None)).await.unwrap();
+    app.command(Command::SelectChannel(11, Some(Duration::from_secs(5400))))
+        .await
+        .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let state = app.snapshot.read().await;
@@ -4094,11 +4102,9 @@ async fn hourly_token_validation_preserves_manual_choice() {
                 .filter(|r| r.url.path() == "/oauth2/validate")
                 .count()
                 >= 2;
+            let profile_refreshed = validation::calls(&server, "AccountProfile").await >= 2;
             let state = app.snapshot.read().await;
-            if revalidated
-                && state.channels.len() == 2
-                && state.inventory_status.checked_at > checked_before
-            {
+            if revalidated && profile_refreshed && state.channels.len() == 2 {
                 break;
             }
             drop(state);
@@ -4108,6 +4114,10 @@ async fn hourly_token_validation_preserves_manual_choice() {
     .await
     .unwrap();
     let state = app.snapshot.read().await.clone();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(1800)).await;
+    tokio::time::resume();
+    validation::wait_for(&app, |state| !state.manual_mode.active).await;
     app.shutdown.cancel();
     tokio::time::timeout(Duration::from_secs(5), worker)
         .await
@@ -4119,6 +4129,23 @@ async fn hourly_token_validation_preserves_manual_choice() {
         "routine hourly validation exited manual mode"
     );
     assert!(state.channels.iter().any(|c| c.id == 11 && c.watching));
+    assert_eq!(state.inventory_status.checked_at, checked_before);
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .filter(|request| {
+                request
+                    .body_json::<serde_json::Value>()
+                    .ok()
+                    .is_some_and(|body| body["operationName"] == "Inventory")
+            })
+            .count(),
+        1,
+        "valid hourly checks must not refetch inventory"
+    );
 }
 
 #[tokio::test]

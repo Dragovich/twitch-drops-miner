@@ -300,8 +300,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   fabricate missing campaign metadata.
 - Every session/job/socket task is owned and drained. Logout coalesces and removes only Twitch
   credentials after drainage; concurrent shutdown cannot interrupt removal in either queue order.
-  Hourly validation/network reconfiguration preserves manual selection/deadlines and queues
-  new channel choices until fresh channel eligibility is available. Cache clear
+  Validate Twitch tokens at startup and hourly with owned, cancellable work independent of
+  mining and inventory scheduling. Valid checks keep the current network generation, inventory
+  deadline, progress, manual selection/deadlines and sockets. Failed checks retain credentials
+  and retry after one minute using bounded HTTP requests; rejected tokens drain the generation
+  before the existing authentication path renews them. Account/client mismatches still reject
+  the session. Network reconfiguration preserves manual selection/deadlines and queues new
+  channel choices until fresh channel eligibility is available. Cache clear
   preserves settings, credentials and completed campaigns, and clears local claim history with
   durable cleared-ID tombstones before refreshing; failure to persist must fail the clear.
 - Requests use bounded concurrency/rate, retries and cancellation. Connection Quality defaults
@@ -333,8 +338,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   an owned runtime worker, separate from Twitch work. Publish after successful durable claims;
   never notify on estimates, imported history or cache clears. Browser/native notification
   payloads stay unchanged. A bounded queue and account/drop deduplication make delivery best
-  effort; no persistent outbox or restart replay. Hourly Twitch renewal does not restart it.
-- `telegram.json` stores enabled/token/numeric chat ID separately from public settings. Use
+  effort; no persistent outbox or restart replay. Twitch validation/renewal does not restart it.
+- `telegram.json` stores enabled/remote_control/token/numeric chat ID separately from public settings. Use
   atomic private writes and revision conflicts; unreadable files remain untouched with Telegram
   disabled. Tokens are write-only, omitted from snapshots/IPC reads, logs and browser drafts.
   Blank input retains the saved token; explicit Remove configuration clears it. Accepted saves
@@ -351,8 +356,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   HTTPS Twitch artwork; missing/unsafe artwork stays text-only. Telegram controls rendering.
   Never upload/download image bodies or add another message; tests remain text-only.
 - Settings > Notifications shares the same save/remove/test application methods through guarded
-  server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
-  additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+  server HTTP and scoped desktop IPC. Keep setup help compact; no additional providers or
+  automatic ready/progress alerts. Tests/fixtures never contact real bots.
   Form errors stay inline without a reload-settings action. Revision conflicts retain edits
   and explain that reopening Notifications loads the current saved settings.
 - Show the saved bot name as a chat link beside Telegram's heading. Resolve it with a
@@ -362,6 +367,20 @@ embed it and run without a build tool/runtime companion. Production builds never
   from saves/delivery. Fixtures disable lookup traffic. Save uses the MDI save icon and its
   disabled state confirms success; omit the saved banner. Remove configuration is an
   accessible, icon-only delete action; retain inline errors and test-send feedback.
+- Remote control defaults off independently of claim alerts. The same owned runtime joins
+  a separate bounded long-poll loop using the isolated Telegram client. Only fresh, original
+  private messages from the configured positive chat ID and identical non-bot sender may
+  run `/status`, `/pause`, `/resume`, `/mine Game` or `/help` (`/start` also shows help).
+  Match known game names with shared casefolding; append without replacing games or changing
+  priorities, pause or manual mode. Reuse owned revision-checked settings saves; replies
+  report saved intent and confirmed progress only. Ignore forwarded, edited and group messages.
+  Discard startup/reconfiguration backlog and messages older than two minutes. Advance the
+  in-memory offset before execution; failed replies never replay commands. Config changes,
+  logout and shutdown cancel/fence pending work; accepted writes still drain. Register the
+  command menu for the owner chat only. Do not alter webhooks. Pace/retry failed polls with
+  bounded backoff and report receiver conflicts separately; keep failures out of mining.
+  Replies share paced delivery with claims/tests, work with claim alerts disabled, and never
+  contain tokens, raw requests or response bodies. Offline fixtures disable all bot traffic.
 
 ## Authentication and storage
 
@@ -442,8 +461,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   Lighten dark chat colors only enough for readable contrast, preserving their hue.
   Profile metadata uses bounded, cancellable GraphQL reads owned by the authenticated network
   generation, concurrently with mining, using the existing login with no new scopes. Refresh
-  once per generation (normally hourly), preserve same-account metadata during renewal, and
-  clear it on logout/account changes. Never persist it or accept late data for another account.
+  at generation startup and after successful hourly validation. Preserve same-account metadata
+  during renewal and clear it on logout/account changes. Never persist it or accept late data
+  for another account.
   Query the full selectable global badge collection separately; permission/schema/network
   failures leave it explicitly unavailable while retaining equipped badges. Do not include
   channel subscription badges or infer badge ownership from the global artwork catalog.

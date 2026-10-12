@@ -24,10 +24,14 @@ use crate::{
     store::{atomic_json, read_json},
 };
 
+mod control;
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Config {
     enabled: bool,
+    #[serde(default)]
+    remote_control: bool,
     #[serde(default)]
     include_image: bool,
     token: String,
@@ -37,6 +41,7 @@ struct Config {
 #[derive(Clone, Serialize)]
 pub struct View {
     pub enabled: bool,
+    pub remote_control: bool,
     pub include_image: bool,
     pub token_configured: bool,
     pub chat_id: String,
@@ -63,6 +68,8 @@ pub struct Update {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
+    pub remote_control: bool,
+    #[serde(default)]
     pub include_image: bool,
     #[serde(default)]
     pub token: String,
@@ -76,6 +83,8 @@ pub struct Update {
 pub enum Error {
     #[error("telegram_invalid")]
     Invalid,
+    #[error("telegram_private_chat")]
+    PrivateChat,
     #[error("settings_conflict")]
     Conflict,
     #[error("telegram_storage")]
@@ -90,6 +99,8 @@ pub enum Error {
     Chat,
     #[error("telegram_failed")]
     Delivery,
+    #[error("telegram_failed")]
+    Oversized,
     #[error("telegram_cancelled")]
     Cancelled,
 }
@@ -98,13 +109,14 @@ impl Error {
     pub fn code(self) -> &'static str {
         match self {
             Self::Invalid => "telegram_invalid",
+            Self::PrivateChat => "telegram_private_chat",
             Self::Conflict => "settings_conflict",
             Self::Storage => "telegram_storage",
             Self::Disabled => "telegram_disabled",
             Self::Busy => "telegram_busy",
             Self::Token => "telegram_token",
             Self::Chat => "telegram_chat",
-            Self::Delivery => "telegram_failed",
+            Self::Delivery | Self::Oversized => "telegram_failed",
             Self::Cancelled => "telegram_cancelled",
         }
     }
@@ -123,22 +135,31 @@ pub struct Claim {
 
 impl Claim {
     fn message(&self) -> String {
-        // Bound names before escaping so truncation cannot split HTML tags or entities.
-        let escape = |name: &str| {
-            name.chars()
-                .take(480)
-                .collect::<String>()
-                .replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;")
-        };
         format!(
             "Drop claimed\n<b>{}</b> — {}\nReward: <b>{}</b>",
-            escape(&self.game),
-            escape(&self.campaign),
-            escape(&self.reward)
+            html(&self.game),
+            html(&self.campaign),
+            html(&self.reward)
         )
     }
+}
+
+fn html(value: &str) -> String {
+    // Bound names before escaping so truncation cannot split HTML tags or entities.
+    value
+        .chars()
+        .take(480)
+        .collect::<String>()
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MessageKind {
+    Claim,
+    Test,
+    Reply,
 }
 
 struct State {
@@ -178,7 +199,9 @@ impl Config {
             && self.chat_id.len() <= 24
             && token
             && chat
-            && (!self.enabled || (!self.token.is_empty() && !self.chat_id.is_empty()))
+            && (!(self.enabled || self.remote_control)
+                || (!self.token.is_empty() && !self.chat_id.is_empty()))
+            && (!self.remote_control || self.chat_id.parse::<i64>().is_ok_and(|id| id > 0))
     }
 }
 
@@ -230,6 +253,7 @@ impl Telegram {
         let state = self.state.lock().unwrap();
         View {
             enabled: state.config.enabled,
+            remote_control: state.config.remote_control,
             include_image: state.config.include_image,
             token_configured: !state.config.token.is_empty(),
             chat_id: state.config.chat_id.clone(),
@@ -269,6 +293,7 @@ impl Telegram {
         } else {
             Config {
                 enabled: update.enabled,
+                remote_control: update.remote_control,
                 include_image: update.include_image,
                 token: if update.token.is_empty() {
                     state.config.token.clone()
@@ -278,6 +303,9 @@ impl Telegram {
                 chat_id: update.chat_id.trim().to_owned(),
             }
         };
+        if config.remote_control && !config.chat_id.parse::<i64>().is_ok_and(|id| id > 0) {
+            return Err(Error::PrivateChat);
+        }
         if !config.valid() {
             return Err(Error::Invalid);
         }
@@ -392,7 +420,7 @@ impl Telegram {
         html: &str,
         proxy: &str,
         shutdown: &CancellationToken,
-        test: bool,
+        kind: MessageKind,
         image: Option<&str>,
     ) -> Result<(), Error> {
         if self.delivery.is_closed() {
@@ -406,13 +434,17 @@ impl Telegram {
             if state.unreadable {
                 return Err(Error::Storage);
             }
-            if !state.config.enabled {
+            if !match kind {
+                MessageKind::Claim => state.config.enabled,
+                MessageKind::Reply => state.config.remote_control,
+                MessageKind::Test => state.config.enabled || state.config.remote_control,
+            } {
                 return Err(Error::Disabled);
             }
             (state.config.clone(), state.cancel.clone())
         };
         let operation = async {
-            let _permit = if test {
+            let _permit = if kind == MessageKind::Test {
                 self.delivery.try_acquire().map_err(|_| Error::Busy)?
             } else {
                 self.delivery
@@ -468,7 +500,7 @@ async fn response_json(mut response: reqwest::Response) -> Result<serde_json::Va
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| Error::Delivery)? {
         if body.len() + chunk.len() > 65536 {
-            return Err(Error::Delivery);
+            return Err(Error::Oversized);
         }
         body.extend_from_slice(&chunk);
     }
@@ -519,7 +551,7 @@ impl Application {
                 "Drops Miner\nTest message",
                 &proxy,
                 &self.shutdown,
-                true,
+                MessageKind::Test,
                 None,
             )
             .await;
@@ -530,7 +562,11 @@ impl Application {
     }
 }
 
-pub async fn run(app: Arc<Application>, mut events: broadcast::Receiver<Notification>) {
+pub async fn run(app: Arc<Application>, events: broadcast::Receiver<Notification>) {
+    tokio::join!(run_claims(app.clone(), events), control::run(app));
+}
+
+async fn run_claims(app: Arc<Application>, mut events: broadcast::Receiver<Notification>) {
     let mut seen = VecDeque::new();
     loop {
         let event = tokio::select! { biased;
@@ -567,7 +603,7 @@ pub async fn run(app: Arc<Application>, mut events: broadcast::Receiver<Notifica
                 &text,
                 &proxy,
                 &app.shutdown,
-                false,
+                MessageKind::Claim,
                 Some(&claim.image_url),
             )
             .await;

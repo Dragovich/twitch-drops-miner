@@ -339,7 +339,6 @@ impl Mining {
         );
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let validate_at = Instant::now() + Duration::from_secs(3600);
         loop {
             tokio::select! {biased;
                 _=self.client.http.cancel.cancelled()=>return Err(TwitchError::Cancelled),
@@ -361,9 +360,6 @@ impl Mining {
                     }
                 },
                 _=tick.tick()=>{},
-            }
-            if Instant::now() >= validate_at {
-                return Ok(());
             }
             if self.next_transition.is_some_and(|at| Utc::now() >= at) {
                 self.channels_dirty = true;
