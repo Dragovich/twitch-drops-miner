@@ -33,7 +33,7 @@ for (const viewport of [
     await search.fill('search');
     const results = page.getByRole('listbox');
     await expect(results.getByRole('option')).toHaveCount(15);
-    const popup = page.locator('.game-search-popover');
+    const popup = page.locator('.search-popover');
     const box = (await popup.boundingBox())!;
     const field = (await search.boundingBox())!;
     expect(box.x).toBe(field.x);
@@ -171,7 +171,7 @@ test('suggestions follow the field when an autosave error shifts the page', asyn
   await expect
     .poll(async () => {
       const field = (await search.boundingBox())!;
-      const popup = (await page.locator('.game-search-popover').boundingBox())!;
+      const popup = (await page.locator('.search-popover').boundingBox())!;
       return field.y > before && popup.y === field.y + field.height + 4;
     })
     .toBe(true);

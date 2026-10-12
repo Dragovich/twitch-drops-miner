@@ -9,7 +9,7 @@ use twitch_drops_miner_core::{
     app::{
         AppError, Application, Command, ENGLISH,
         api::{ChannelSelection, HistoryQuery},
-        commands::GameQuery,
+        commands::{ChannelQuery, GameQuery},
         projection::StatePatch,
     },
     dto::Snapshot,
@@ -75,6 +75,7 @@ pub enum Request {
     TestTelegram,
     SelectChannel(ChannelSelection),
     Games(GameQuery),
+    SearchChannels(ChannelQuery),
     History(HistoryQuery),
     HistoryStats,
     VerifyProxy {
@@ -112,6 +113,7 @@ impl Request {
             }
             Self::SelectChannel(selection) => app.select_channel(selection).await?,
             Self::Games(query) => return Ok(json!(app.games(query).await?)),
+            Self::SearchChannels(query) => return Ok(json!(app.search_channels(query).await?)),
             Self::History(query) => return Ok(app.history(query).await),
             Self::HistoryStats => return Ok(app.history.lock().await.stats()),
             Self::VerifyProxy { proxy } => return app.verify_proxy(&proxy).await,
@@ -288,12 +290,22 @@ mod tests {
         let (app, _commands) = Application::open(dir.path().into()).unwrap();
         assert!(serde_json::from_value::<Request>(json!({"kind":"auth_settings"})).is_err());
         assert!(serde_json::from_value::<Request>(json!({"kind":"logout","extra":true})).is_err());
-        let request =
-            serde_json::from_value::<Request>(json!({"kind":"games","value":{"search":""}}))
-                .unwrap();
+        for kind in ["games", "search_channels"] {
+            let request =
+                serde_json::from_value::<Request>(json!({"kind":kind,"value":{"search":""}}))
+                    .unwrap();
+            assert!(matches!(
+                request.run(app.clone()).await,
+                Err(AppError::InvalidRequest)
+            ));
+        }
         assert!(matches!(
-            request.run(app.clone()).await,
-            Err(AppError::InvalidRequest)
+            Request::SearchChannels(ChannelQuery {
+                search: "streamer".into()
+            })
+            .run(app.clone())
+            .await,
+            Err(AppError::Unavailable)
         ));
         let telegram = Request::Telegram.run(app.clone()).await.unwrap();
         assert_eq!(telegram["token_configured"], false);

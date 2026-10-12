@@ -73,14 +73,12 @@ impl Mining {
             self.manual_pending = None;
             self.manual_error = None;
             self.manual = intent.selected.and_then(|id| {
-                self.channels
-                    .iter()
-                    .find(|c| c.identity.id == id && c.online())?;
+                self.channels.iter().find(|c| c.identity.id == id)?;
                 Some(ManualSelection::new(id, intent.manual_duration))
             });
             self.seen.manual_revision = intent.manual_revision;
             if intent.selected.is_some() && self.manual.is_none() {
-                self.manual_error = Some(message("gui.channels.offline", &[]));
+                self.manual_error = Some(message("gui.channels.not_found", &[]));
             }
             self.publish = true;
         }
@@ -391,9 +389,6 @@ impl Mining {
             Err(_) => return Some("gui.channels.lookup_failed"),
         };
         self.preserve_channel_events(std::slice::from_mut(&mut resolved), requested_at);
-        if !resolved.online() {
-            return Some("gui.channels.offline");
-        }
         let id = resolved.identity.id;
         self.channels.retain(|c| c.identity.id != id);
         self.channels.insert(0, resolved.clone());

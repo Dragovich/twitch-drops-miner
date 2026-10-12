@@ -323,8 +323,8 @@ pub(super) async fn run_generation(
     let mut pool = PubSub::start(client.clone(), events);
     let profile = refresh_profile(app.clone(), client.clone());
     let (queries, requests) = mpsc::channel(4);
-    *app.game_queries.write().await = Some(queries);
-    let directory = game_directory(client.clone(), requests);
+    *app.directory_queries.write().await = Some(queries);
+    let directory = read_directory(client.clone(), requests);
     let mut mining = Mining::new(app.clone(), client, journal, intent, receiver);
     {
         let saved = resume.lock().await;
@@ -353,7 +353,7 @@ pub(super) async fn run_generation(
     };
     *resume.lock().await = mining.resume();
     cancel.cancel();
-    *app.game_queries.write().await = None;
+    *app.directory_queries.write().await = None;
     // Owned jobs include durable claim writes. Cancellation stops network work,
     // while any confirmed claim finishes its disk transaction before logout.
     while mining.jobs.join_next().await.is_some() {}
@@ -361,24 +361,43 @@ pub(super) async fn run_generation(
     result
 }
 
-pub(super) async fn game_directory(
+pub(super) async fn read_directory(
     client: TwitchClient,
-    mut requests: mpsc::Receiver<crate::app::commands::GameRequest>,
+    mut requests: mpsc::Receiver<crate::app::commands::DirectoryRequest>,
 ) -> Result<(), TwitchError> {
     loop {
-        let mut request = tokio::select! { biased;
+        let request = tokio::select! { biased;
             _ = client.http.cancel.cancelled() => return Err(TwitchError::Cancelled),
             request = requests.recv() => request.ok_or(TwitchError::Cancelled)?,
         };
-        let result = tokio::select! { biased;
-            _ = request.complete.closed() => continue,
-            result = client.games(&request.query) => result,
-        };
-        let fatal = match result {
-            Err(error @ (TwitchError::Unauthorized | TwitchError::Cancelled)) => Some(error),
-            _ => None,
-        };
-        let _ = request.complete.send(result);
+        use crate::app::commands::DirectoryRequest;
+        let fatal = match request {
+            DirectoryRequest::Games {
+                query,
+                mut complete,
+            } => {
+                let result = tokio::select! { biased;
+                    _ = complete.closed() => continue,
+                    result = client.games(&query) => result,
+                };
+                let fatal = result.as_ref().err().copied();
+                let _ = complete.send(result);
+                fatal
+            }
+            DirectoryRequest::Channels {
+                query,
+                mut complete,
+            } => {
+                let result = tokio::select! { biased;
+                    _ = complete.closed() => continue,
+                    result = client.search_channels(&query) => result,
+                };
+                let fatal = result.as_ref().err().copied();
+                let _ = complete.send(result);
+                fatal
+            }
+        }
+        .filter(|error| matches!(error, TwitchError::Unauthorized | TwitchError::Cancelled));
         if let Some(error) = fatal {
             return Err(error);
         }
