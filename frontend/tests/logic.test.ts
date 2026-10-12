@@ -91,7 +91,7 @@ describe('boundary behavior', () => {
     expect(moveGame(['A', 'B'], 0, 1.5)).toEqual(['A', 'B']);
   });
   it('localizes with English fallback and preserves literal user text', () => {
-    expect(translator({})('watching', { channel: '<b>name</b>' })).toBe('Watching <b>name</b>');
+    expect(translator({})('watch_channel', { channel: '<b>name</b>' })).toBe('Watch <b>name</b>');
     expect(plainText('🎮 Active ✔')).toBe('Active');
   });
   it('combines campaign statuses with OR and link filtering with AND', () => {

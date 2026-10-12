@@ -59,7 +59,7 @@ pub struct Application {
     pub(crate) settings_slot: Arc<Semaphore>,
     pub notifications: broadcast::Sender<Notification>,
     pub telegram: crate::notifications::Telegram,
-    pub(crate) game_queries: RwLock<Option<mpsc::Sender<commands::GameRequest>>>,
+    pub(crate) directory_queries: RwLock<Option<mpsc::Sender<commands::DirectoryRequest>>>,
     commands: mpsc::Sender<CommandRequest>,
 }
 
@@ -98,7 +98,7 @@ impl Application {
                 settings_slot: Arc::new(Semaphore::new(1)),
                 notifications: broadcast::channel(32).0,
                 telegram,
-                game_queries: RwLock::new(None),
+                directory_queries: RwLock::new(None),
                 commands,
             }),
             receiver,

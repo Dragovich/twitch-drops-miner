@@ -108,6 +108,8 @@ pub struct ChannelView {
     #[serde(default)]
     pub login: String,
     pub name: String,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
     pub game: Option<String>,
     pub game_id: Option<u64>,
     pub game_icon: Option<String>,
@@ -116,6 +118,16 @@ pub struct ChannelView {
     pub drops_enabled: bool,
     pub acl_based: bool,
     pub watching: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ChannelSearchResult {
+    pub id: u64,
+    pub login: String,
+    pub name: String,
+    pub avatar_url: Option<String>,
+    pub online: bool,
+    pub game: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -156,6 +168,8 @@ pub struct OAuthCode {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct ManualMode {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_id: Option<u64>,
     pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game_name: Option<String>,
