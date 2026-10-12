@@ -83,8 +83,6 @@ pub struct CampaignView {
     pub id: String,
     pub name: String,
     pub game_name: String,
-    #[serde(default)]
-    pub game_id: u64,
     pub game_box_art_url: String,
     pub campaign_url: String,
     pub link_url: String,
@@ -336,8 +334,6 @@ pub struct PriorityContext {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct AllowedChannel {
-    #[serde(default)]
-    pub id: u64,
     pub login: String,
     pub name: String,
 }

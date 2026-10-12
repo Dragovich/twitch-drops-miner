@@ -4,7 +4,6 @@ import { mdiClose, mdiOpenInNew, mdiReload } from '@mdi/js';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
-import { CampaignChannels } from './CampaignChannels';
 import { safeUrl } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
 import { Art, Empty, IconButton, Notice, ProgressBar, dateTime } from '../../shared/ui/index';
@@ -73,13 +72,7 @@ export function CampaignDetail({
       className="campaign-detail panel"
       aria-label={t('campaign_details')}
       onKeyDown={(event) => {
-        if (
-          event.key === 'Escape' &&
-          !(
-            typeof HTMLElement.prototype.showPopover === 'function' &&
-            event.currentTarget.querySelector(':popover-open')
-          )
-        ) {
+        if (event.key === 'Escape') {
           event.stopPropagation();
           close();
         }
@@ -209,7 +202,6 @@ export function CampaignDetail({
                   </a>
                 )}
               </div>
-              <CampaignChannels key={campaign.id} campaign={campaign} />
             </div>
             <div className="divide-y divide-divider">
               {campaign.drops.map((drop) => {

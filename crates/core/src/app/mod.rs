@@ -1,7 +1,6 @@
 pub mod activity;
 pub mod api;
 pub mod commands;
-pub mod participants;
 pub mod projection;
 pub mod state;
 
@@ -61,7 +60,6 @@ pub struct Application {
     pub notifications: broadcast::Sender<Notification>,
     pub telegram: crate::notifications::Telegram,
     pub(crate) game_queries: RwLock<Option<mpsc::Sender<commands::GameRequest>>>,
-    pub(crate) participant_queries: RwLock<Option<mpsc::Sender<participants::Request>>>,
     commands: mpsc::Sender<CommandRequest>,
 }
 
@@ -101,7 +99,6 @@ impl Application {
                 notifications: broadcast::channel(32).0,
                 telegram,
                 game_queries: RwLock::new(None),
-                participant_queries: RwLock::new(None),
                 commands,
             }),
             receiver,
