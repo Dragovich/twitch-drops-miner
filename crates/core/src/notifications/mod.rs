@@ -99,6 +99,8 @@ pub enum Error {
     Chat,
     #[error("telegram_failed")]
     Delivery,
+    #[error("telegram_failed")]
+    Oversized,
     #[error("telegram_cancelled")]
     Cancelled,
 }
@@ -114,7 +116,7 @@ impl Error {
             Self::Busy => "telegram_busy",
             Self::Token => "telegram_token",
             Self::Chat => "telegram_chat",
-            Self::Delivery => "telegram_failed",
+            Self::Delivery | Self::Oversized => "telegram_failed",
             Self::Cancelled => "telegram_cancelled",
         }
     }
@@ -498,7 +500,7 @@ async fn response_json(mut response: reqwest::Response) -> Result<serde_json::Va
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| Error::Delivery)? {
         if body.len() + chunk.len() > 65536 {
-            return Err(Error::Delivery);
+            return Err(Error::Oversized);
         }
         body.extend_from_slice(&chunk);
     }

@@ -125,6 +125,88 @@ fn controls_default_off_and_require_a_private_chat_without_changing_alert_compat
     );
 }
 
+#[test]
+fn idle_id_reset_accepts_a_fresh_command_but_not_old_or_repeated_updates() {
+    let now = 2_000_000;
+    let mut cursor = Cursor::default();
+    assert!(cursor.advance(&incoming(500, "/pause", now), now));
+    assert!(!cursor.advance(&incoming(499, "/resume", now + 1), now + 1));
+    let later = now + 7 * 86400;
+    assert!(!cursor.advance(&incoming(500, "/pause", now), later));
+    let fresh = incoming(10, "/resume", later);
+    assert!(cursor.advance(&fresh, later));
+    assert_eq!(command(&fresh, 42, now, later), Some(Command::Resume));
+    assert_eq!(cursor.offset, Some(11));
+    assert!(!cursor.advance(&fresh, later));
+    assert!(cursor.advance(&incoming(11, "/pause", later), later));
+}
+
+#[tokio::test]
+async fn large_messages_and_an_oversized_update_do_not_block_the_next_owner_command() {
+    let server = MockServer::start().await;
+    let (_dir, app, mut commands) = application(&server).await;
+    let worker = tokio::spawn(async move {
+        while let Some(request) = commands.recv().await {
+            let _ = request.complete.send(Ok(()));
+        }
+    });
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    Mock::given(path("/bot123:control_test/getUpdates"))
+        .respond_with(move |request: &wiremock::Request| {
+            let body: Value = serde_json::from_slice(&request.body).unwrap();
+            assert_eq!(body["limit"], 1);
+            let call = count.fetch_add(1, Ordering::SeqCst);
+            let now = Utc::now().timestamp();
+            let update = match call {
+                0 => incoming(0, "/resume", now),
+                1..=10 => incoming(call as i64, &"Ж".repeat(4096), now),
+                11 => incoming(11, &"x".repeat(65536), now),
+                _ => {
+                    if call == 12 {
+                        assert_eq!(body["offset"], -1);
+                    }
+                    incoming(12, "/pause", now)
+                }
+            };
+            ResponseTemplate::new(200).set_body_json(json!({"ok":true,"result":[update]}))
+        })
+        .mount(&server)
+        .await;
+    for endpoint in ["setMyCommands", "sendMessage"] {
+        Mock::given(path(format!("/bot123:control_test/{endpoint}")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"ok":true,"result":true})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    let remote = tokio::spawn(run(app.clone()));
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while !app.settings.read().await.mining_paused {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        while !server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .any(|r| r.url.path().ends_with("sendMessage"))
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(calls.load(Ordering::SeqCst) >= 13);
+    app.shutdown.cancel();
+    remote.await.unwrap();
+    app.drain_writes().await;
+    worker.abort();
+    let _ = worker.await;
+}
+
 #[tokio::test]
 async fn commands_save_only_the_requested_setting_and_use_confirmed_progress() {
     let server = MockServer::start().await;
@@ -263,7 +345,7 @@ async fn polling_discards_backlog_deduplicates_and_replies_without_claim_alerts(
             let now = Utc::now().timestamp();
             let result = match body["offset"].as_i64().unwrap() {
                 -1 => vec![incoming(10, "/resume", now)],
-                11 => vec![incoming(11, "/pause", now), incoming(11, "/pause", now)],
+                11 => vec![incoming(11, "/pause", now)],
                 _ => vec![incoming(11, "/pause", now)],
             };
             ResponseTemplate::new(200).set_body_json(json!({"ok":true,"result":result}))
@@ -337,7 +419,7 @@ async fn requests_are_bounded_cancellable_and_do_not_change_webhooks() {
         ),
         (
             ResponseTemplate::new(200).set_body_string("x".repeat(65537)),
-            Failure::Unavailable,
+            Failure::Oversized,
         ),
         (
             ResponseTemplate::new(302).insert_header("location", "/redirect"),

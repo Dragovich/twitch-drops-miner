@@ -23,6 +23,7 @@ struct Session {
 enum Failure {
     Cancelled,
     Unavailable,
+    Oversized,
     Conflict,
     RateLimited(u64),
 }
@@ -34,6 +35,29 @@ enum Command {
     Pause,
     Resume,
     Mine(String),
+}
+
+#[derive(Default)]
+struct Cursor {
+    offset: Option<i64>,
+    last_date: i64,
+}
+
+impl Cursor {
+    fn advance(&mut self, update: &Value, now: i64) -> bool {
+        let id = update["update_id"].as_i64().unwrap();
+        let date = update["message"]["date"]
+            .as_i64()
+            .filter(|date| *date <= now + 5);
+        // Telegram chooses a new random ID after a week without updates.
+        let idle_reset = date.is_some_and(|date| date.saturating_sub(self.last_date) >= 7 * 86400);
+        if self.offset.is_some_and(|offset| id < offset) && !idle_reset {
+            return false;
+        }
+        self.offset = Some(id + 1);
+        self.last_date = self.last_date.max(date.unwrap_or(now));
+        true
+    }
 }
 
 fn text(key: &str, args: &[(&str, &str)]) -> String {
@@ -160,9 +184,10 @@ impl Session {
             if status == 409 {
                 return Err(Failure::Conflict);
             }
-            let value = response_json(response)
-                .await
-                .map_err(|_| Failure::Unavailable)?;
+            let value = response_json(response).await.map_err(|error| match error {
+                Error::Oversized if status == 200 => Failure::Oversized,
+                _ => Failure::Unavailable,
+            })?;
             if status == 429 {
                 return Err(Failure::RateLimited(
                     value["parameters"]["retry_after"]
@@ -256,15 +281,16 @@ impl Session {
     }
 
     async fn poll(&self, app: &Arc<Application>) {
-        let mut offset = None;
+        let mut cursor = Cursor::default();
+        let mut tail = false;
         loop {
-            let bootstrap = offset.is_none();
+            let bootstrap = cursor.offset.is_none();
             let result = self
                 .api(
                     app,
                     "getUpdates",
                     json!({
-                        "offset":offset.unwrap_or(-1), "limit":if bootstrap { 1 } else { 10 },
+                        "offset":if tail { -1 } else { cursor.offset.unwrap_or(-1) }, "limit":1,
                         "timeout":if bootstrap { 0 } else { 25 }, "allowed_updates":["message"]
                     }),
                 )
@@ -272,7 +298,7 @@ impl Session {
             let updates = result.and_then(|value| {
                 let updates = value
                     .as_array()
-                    .filter(|v| v.len() <= 10)
+                    .filter(|v| v.len() <= 1)
                     .ok_or(Failure::Unavailable)?;
                 if updates.iter().any(|v| {
                     !v["update_id"]
@@ -286,6 +312,8 @@ impl Session {
             match updates {
                 Err(Failure::Cancelled) => return,
                 Err(failure) => {
+                    // Skip the blocked queue when a later update arrives; never parse/execute a partial body.
+                    tail |= failure == Failure::Oversized;
                     let conflict = failure == Failure::Conflict;
                     app.record_activity(event(conflict)).await;
                     let seconds = match failure {
@@ -299,15 +327,14 @@ impl Session {
                     continue;
                 }
                 Ok(updates) => {
+                    tail = false;
                     app.recover_activity(&event(false)).await;
                     app.recover_activity(&event(true)).await;
                     for update in updates {
-                        let id = update["update_id"].as_i64().unwrap();
-                        if offset.is_some_and(|offset| id < offset) {
+                        if !cursor.advance(&update, Utc::now().timestamp()) {
                             continue;
                         }
                         // Advance before execution/reply; failed replies must never repeat a command.
-                        offset = Some(id + 1);
                         if bootstrap {
                             continue;
                         }
@@ -338,7 +365,7 @@ impl Session {
                         super::report(app, sent).await;
                     }
                     if bootstrap {
-                        offset.get_or_insert(0);
+                        cursor.offset.get_or_insert(0);
                         let commands: Vec<_> = ["status", "pause", "resume", "mine", "help"].into_iter()
                             .map(|command| json!({"command":command, "description":text(&format!("menu_{command}"), &[])})).collect();
                         // A missing menu does not disable typed commands, or replace another chat's menu.

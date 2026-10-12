@@ -419,7 +419,7 @@ async fn rejected_and_ambiguous_responses_are_not_retried_or_followed() {
         ),
         (
             ResponseTemplate::new(200).set_body_string("x".repeat(65537)),
-            Error::Delivery,
+            Error::Oversized,
         ),
     ] {
         server.reset().await;
