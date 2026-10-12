@@ -5755,7 +5755,7 @@ dependencies = [
 
 [[package]]
 name = "twitch-drops-miner"
-version = "2.1.0"
+version = "2.2.0-rc.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -5792,7 +5792,7 @@ dependencies = [
 
 [[package]]
 name = "twitch-drops-miner-core"
-version = "2.1.0"
+version = "2.2.0-rc.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -5827,7 +5827,7 @@ dependencies = [
 
 [[package]]
 name = "twitch-drops-miner-desktop"
-version = "2.1.0"
+version = "2.2.0-rc.1"
 dependencies = [
  "anyhow",
  "keepawake",
