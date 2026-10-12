@@ -1028,8 +1028,14 @@ test('keyboard focus remains visible without outlines across controls', async ({
   );
 });
 test('channel search, clear, selection and automatic mode', async ({ page }) => {
+  const channels = page.getByRole('region', { name: 'Channels', exact: true });
   await page.getByRole('searchbox', { name: 'Search channels' }).fill('HARBOR');
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole('region', { name: 'Now mining', exact: true })
+      .getByRole('link', { name: 'northwind', exact: true }),
+  ).toBeVisible();
   const watch = page.getByRole('button', { name: 'Watch harbor' });
   await expect(watch).toHaveText('');
   await expect(watch).toHaveAttribute('title', 'Watch harbor');
@@ -1042,7 +1048,7 @@ test('channel search, clear, selection and automatic mode', async ({ page }) => 
   await automatic.click();
   await expect(page.getByRole('img', { name: 'Automatic selection' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toBeVisible();
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toBeVisible();
 });
 
 test('offline channels with unknown viewers do not crash Overview', async ({ page, request }) => {
@@ -1998,11 +2004,12 @@ test('channel snapshots replace old rows and allow backend-verified special even
       },
     },
   });
-  await expect(page.getByRole('link', { name: 'event-host', exact: true })).toHaveAttribute(
+  const channels = page.getByRole('region', { name: 'Channels', exact: true });
+  await expect(channels.getByRole('link', { name: 'event-host', exact: true })).toHaveAttribute(
     'href',
     'https://www.twitch.tv/event_host',
   );
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
 });
 
 test('manual lookup has no preparation message and clears pending state without a reload', async ({
@@ -2092,7 +2099,7 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
   );
   await mine.click();
   expect((await selection).postDataJSON().duration_minutes).toBe(15);
-  await expect(page.getByRole('link', { name: 'extra_streamer', exact: true })).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'extra_streamer', exact: true })).toBeVisible();
   await expect(page.getByText('Manual selection', { exact: true })).toBeVisible();
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other game',
