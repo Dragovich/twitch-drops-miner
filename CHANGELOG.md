@@ -1,6 +1,6 @@
 # Changelog
 
-## [v2.2.0-rc.1](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.2.0-rc.1) — 2026-10-12
+## [v2.2.0](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.2.0) — 2026-10-12
 
 - add optional private-chat Telegram controls for status, pause, resume and game selection on desktop and server ([#109](https://github.com/ohne-b/twitch-drops-miner/pull/109))
 - allow automatic drop claiming to be disabled while mining continues ([#107](https://github.com/ohne-b/twitch-drops-miner/pull/107))
