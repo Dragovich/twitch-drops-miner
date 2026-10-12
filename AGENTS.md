@@ -202,11 +202,18 @@ embed it and run without a build tool/runtime companion. Production builds never
   channels, selected games or opted-in reward types, and eligible rewards. Offline/ineligible streams yield even at tied
   fallback priority. Preserve nullable viewer counts and the watching row during rebuilds.
 - Channels publishes currently eligible selected-game or automatic-reward streams plus the explicitly selected
-  manual channel. Rank automatic candidates before the channel limit using matching campaign
+  manual channel. Directory discovery requests and consumes at most 100 streams per eligible game;
+  retain the overall 199-channel bound and existing PubSub limits. Rank automatic candidates before the channel limit using matching campaign
   priority, including actual-ACL special-category streams. Mine channel accepts a validated
   Twitch login/root URL and resolves it with owned bounded work independently of inventory.
-  Manual watching requires a live identity, not catalog coverage, selected games, a drops tag
-  or local reward eligibility. Do not persist game selections or fabricate reward progress.
+  Channel search uses authenticated Helix search with at most 20 live/offline results, sharing
+  the owned, bounded game-query queue and generation cancellation through HTTP and native IPC.
+  Search only while the manual picker is open; debounce and cancel superseded requests. Keep
+  exact-login/URL submission available when search misses a channel or fails. Search results
+  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker,
+  Channels and Now mining, with a fallback for missing art; never persist this metadata.
+  Manual selection accepts an existing offline identity and waits for it to go live. Watching
+  requires a live identity, not catalog coverage, selected games, a drops tag or local reward eligibility. Do not persist game selections or fabricate reward progress.
   Direct lookup and manual stream refresh use a short best-effort metadata attempt;
   missing/failed metadata never blocks watching, but auth/cancellation still propagates.
   Show a known manual reward only after Twitch reports it; do not estimate manual rewards.
@@ -264,6 +271,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   Estimates alone never imply completion or a claim.
 - Claims require account-issued instance IDs, skip upcoming campaigns and stop at the strict
   campaign-end + 24-hour deadline. Earned claims are independent of mining/ignore selection.
+  Global `auto_claim_drops` defaults true, including existing settings. When false, continue
+  watching, inventory imports and confirmed receipt recovery, but do not start claim mutations
+  or replay unconfirmed journal intents. Leave Twitch drop reminders in place while disabled.
+  Recheck the saved setting after intent persistence; an already-started claim may finish
+  and must retain durable results and duplicate protection.
+  Re-enabling resumes eligible claims within their existing deadlines. Only confirmed claims
+  unlock dependent rewards; disabling automatic claims never marks a reward claimed.
   Persist the account-scoped intent before RPC, then its success receipt and history. Keep the
   receipt through the claim window after durable history/archive recovery. Settled receipts
   suppress the same account/drop/instance across refresh, restart and cache clear without
@@ -382,7 +396,9 @@ embed it and run without a build tool/runtime companion. Production builds never
 
 - All displayed times, including tooltips, use the 24-hour `h23` clock (midnight is `00:00`),
   preserving the browser's timezone and locale date format. Use the shared date/time formatter;
-  Activity's time-only display retains seconds. Keep API/storage timestamps unchanged.
+  Activity's time-only display retains seconds. Confirmed progress times show HH:mm today,
+  add month/day on other days and retain years outside the current year; refresh the label
+  at local midnight. Tooltips and accessible labels retain the full date/time. Keep API/storage timestamps unchanged.
 - Use `frontend/src/assets/twitch-drops-miner-logo.svg` for the app, login, favicon and README.
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.
@@ -405,6 +421,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   with the selector for assistive technology, and help available during reconnects. Use concise
   labels: Also mine from other games, Allowed reward types and Ignore rewards by name. Keep
   the two reward groups distinct and preserve all existing settings/mining behavior.
+  Mining preferences also contains the global Automatically claim drops checkbox, using shared
+  autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
+  expiry, prerequisites, outstanding claims on re-enable and already-started requests.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox
@@ -475,7 +494,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   anchor-scrolling the title or navigation out of view.
 - Pause is a saved `mining_paused` setting, default false. It gates automatic and manual
   watch events and progress polling, cancels an in-flight watch and fences late results.
-  Inventory refreshes and earned claims continue. Preserve selected games and the current
+  Inventory refreshes and enabled automatic claims continue. Preserve selected games and the current
   reward; manual timers still expire. The Now mining header becomes Paused with a resume
   action beside the selection mode. Settings save failures must not pretend mining stopped.
   A saved resume request keeps the card and title paused, with the control busy, until the
@@ -489,8 +508,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   inside Now mining beside the selection mode, in smaller, darker text with readable contrast.
   Omit it when confirmation is unknown; let the card header wrap on phones with an 8px row gap.
   Now mining uses 24px vertical/20px horizontal desktop padding and 16px phone padding.
-  Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 80px
+  Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 88px
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
+  Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
+  In Watching text, only the streamer name links to their Twitch channel using the login.
   Keep the 6px progress track and 8px count gap. Group the manual return action and timer
   in one wrapping row, preserving phone hit targets. Its empty state adds 20px vertical padding.
   Known rewards without confirmed progress show an empty progress bar and `0 / required minutes`
@@ -503,6 +524,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   match by instant and their upcoming state agrees; retain distinct per-drop dates.
   Channel views may fill missing game artwork from catalog records with the exact same game
   ID. Never change stream identity/eligibility or add network requests for this fallback.
+  Channels paginates 25 rows with header chevrons. Search covers the full list and resets the page;
+  page links survive navigation, clamp to available results and keep the watched stream first.
+  Pagination does not change mining selection or fetch unrelated streams.
   Keep expanded channel-entry controls and feedback inside the scrollable list body.
   Manual lookup has no preparing message; use a play-circle icon submit button with the Mine
   accessible name/tooltip, preserving its busy/disabled state, inline
@@ -531,6 +555,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   and publishes the durable change to open dashboards; archives never recreate cleared rows.
 - History artwork is optional; retain old rows and use matching live benefits as display fallback.
   Telegram credentials never appear in responses; no server-dashboard installer/updater.
+- Campaign details contain rewards and account/campaign links, with no streamer lists or status
+  lookups. Streamer browsing and manual Watch actions belong in Mining's existing Channels panel.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games

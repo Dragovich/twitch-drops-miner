@@ -1,5 +1,7 @@
 use super::session::{authenticate, reset_session};
 use super::*;
+
+mod auto_claim;
 use crate::{
     domain::{ChannelIdentity, Game, MAX_ESTIMATED_MINUTES},
     store::{CampaignArchive, History, HistoryFilter},
@@ -27,6 +29,7 @@ async fn miner(server: &MockServer) -> (tempfile::TempDir, Mining, watch::Sender
     mining.campaigns =
         vec![Campaign::parse(&campaign_json("one"), &HashMap::new(), Utc::now()).unwrap()];
     mining.channels = vec![Channel {
+        avatar_url: None,
         identity: ChannelIdentity {
             id: 10,
             login: "streamer".into(),
@@ -565,10 +568,10 @@ async fn paused_mining_keeps_inventory_and_earned_claims_running() {
 }
 
 #[tokio::test]
-async fn game_directory_cancels_abandoned_queries_and_ends_with_its_generation() {
-    use crate::app::commands::{GameQuery, GameRequest};
+async fn directory_cancels_abandoned_channel_queries_and_ends_with_its_generation() {
+    use crate::app::commands::{ChannelQuery, DirectoryRequest, GameQuery};
     let server = MockServer::start().await;
-    Mock::given(path("/helix/search/categories"))
+    Mock::given(path("/helix/search/channels"))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_json(json!({"data":[]}))
@@ -578,11 +581,13 @@ async fn game_directory_cancels_abandoned_queries_and_ends_with_its_generation()
         .await;
     let client = TwitchClient::new(Arc::new(http(&server)), &session());
     let (sender, requests) = mpsc::channel(4);
-    let run = tokio::spawn(session::game_directory(client.clone(), requests));
+    let run = tokio::spawn(session::read_directory(client.clone(), requests));
     let (complete, result) = oneshot::channel();
     sender
-        .send(GameRequest {
-            query: GameQuery::Search("first".into()),
+        .send(DirectoryRequest::Channels {
+            query: ChannelQuery {
+                search: "first".into(),
+            },
             complete,
         })
         .await
@@ -602,7 +607,7 @@ async fn game_directory_cancels_abandoned_queries_and_ends_with_its_generation()
         .await;
     let (complete, result) = oneshot::channel();
     sender
-        .send(GameRequest {
+        .send(DirectoryRequest::Games {
             query: GameQuery::Search("second".into()),
             complete,
         })
@@ -2325,10 +2330,11 @@ async fn clearing_history_before_claim_receipt_reconciliation_does_not_restore_t
         &miner.campaigns[0].drops[0],
         &Settings::default(),
     );
-    assert!(
+    assert_eq!(
         claim(&miner.app, &miner.client, &miner.journal, pending)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::Claimed
     );
     assert_eq!(miner.app.history.lock().await.total(), 1);
     miner.app.history.lock().await.clear().unwrap();
@@ -2363,6 +2369,7 @@ async fn claim_journal_recovers_after_history_write_failure_without_fabricating_
     assert_eq!(ClaimJournal::load(dir.path()).unwrap().pending(42).len(), 1);
     std::fs::remove_dir(&file).unwrap();
     let mut miner = miner;
+    miner.app.settings.write().await.auto_claim_drops = false;
     miner.journal = Arc::new(Mutex::new(ClaimJournal::load(dir.path()).unwrap()));
     miner.recover_claims(&HashMap::new()).await.unwrap();
     assert_eq!(miner.app.history.lock().await.total(), 1);
@@ -2417,10 +2424,11 @@ async fn journal_must_be_durable_before_remote_claim_and_failed_claims_are_not_h
             .all(|r| r.url.path() != "/gql")
     );
     std::fs::remove_dir(&file).unwrap();
-    assert!(
-        !claim(&miner.app, &miner.client, &miner.journal, entry)
+    assert_eq!(
+        claim(&miner.app, &miner.client, &miner.journal, entry)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::NotClaimed
     );
     assert_eq!(miner.app.history.lock().await.total(), 0);
     assert!(
@@ -3293,16 +3301,10 @@ async fn manual_channel_preserves_settings_and_survives_catalog_rebuilds() {
 }
 
 #[tokio::test]
-async fn manual_lookup_rejects_offline_and_stale_results_but_does_not_require_eligible_rewards() {
+async fn manual_lookup_rejects_stale_results_but_accepts_offline_and_ineligible_channels() {
     let server = MockServer::start().await;
     let (_dir, mut miner, intent, mut pool) = miner(&server).await;
     let requested_at = Instant::now();
-    let mut offline = external_channel(&miner);
-    offline.broadcast_id = None;
-    assert_eq!(
-        miner.finish_manual(Ok(Some(offline)), requested_at, None),
-        Some("gui.channels.offline")
-    );
     intent.send_modify(|v| v.manual_revision = 2);
     let resolved = external_channel(&miner);
     miner
@@ -3322,8 +3324,13 @@ async fn manual_lookup_rejects_offline_and_stale_results_but_does_not_require_el
     miner.event(Event::Offline(10)).await.unwrap();
     assert_eq!(
         miner.finish_manual(Ok(Some(resolved)), requested_at, None),
-        Some("gui.channels.offline")
+        None
     );
+    assert!(
+        !miner.channels[0].online(),
+        "late lookup cannot restore the offline stream"
+    );
+    assert_eq!(miner.manual.unwrap().channel, 10);
     for restricted in [false, true] {
         miner.campaigns[0].allowed_channels = if restricted {
             vec![miner.channels[0].identity.clone()]
@@ -4417,10 +4424,11 @@ async fn preclaim_publication_and_shutdown_leave_a_durable_receipt_for_finished_
     let history_revision = miner.app.snapshot.read().await.history_revision;
     // The durable RPC result must invalidate History even without a catalog record.
     miner.campaigns.clear();
-    assert!(
+    assert_eq!(
         claim(&miner.app, &miner.client, &miner.journal, pending)
             .await
-            .unwrap()
+            .unwrap(),
+        ClaimOutcome::Claimed
     );
     assert!(ClaimJournal::load(dir.path()).unwrap().pending(42)[0].confirmed);
     assert_eq!(
@@ -4784,4 +4792,138 @@ async fn inventory_recovery_before_claim_completion_preserves_evidence_and_first
         assert!(notifications.try_recv().is_err());
         pool.close().await;
     }
+}
+
+#[tokio::test]
+async fn initially_offline_manual_channel_waits_with_its_timer_and_starts_when_live() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, intent, mut pool) = miner(&server).await;
+    let settings = select(&mut miner).await;
+    let saved = miner.app.data.settings().unwrap();
+    let mut offline = external_channel(&miner);
+    offline.broadcast_id = None;
+    offline.game = None;
+    offline.avatar_url = Some("https://static-cdn.jtvnw.net/channel.png".into());
+    let timer = Duration::from_secs(600);
+    intent.send_modify(|v| {
+        v.channel_login = Some(offline.identity.login.clone());
+        v.manual_duration = Some(timer);
+        v.manual_revision += 1;
+    });
+    miner.apply_intent(&pool).await;
+    miner
+        .complete(
+            Job::Manual {
+                revision: intent.borrow().manual_revision,
+                requested_at: Instant::now(),
+                result: Box::new(Ok(Some(offline))),
+            },
+            &pool,
+        )
+        .await
+        .unwrap();
+    let deadline = miner.manual.unwrap().expires_at.unwrap();
+    miner.reselect(&settings).await;
+    assert!(
+        miner.watching.is_none(),
+        "another live automatic channel cannot replace the offline selection"
+    );
+    assert!(miner.watch_channel(&settings).is_none());
+    miner.publish(&settings).await.unwrap();
+    {
+        let state = miner.app.snapshot.read().await;
+        assert!(state.manual_mode.active);
+        assert_eq!(state.manual_mode.channel_id, Some(999));
+        assert!(state.manual_mode.error.is_none());
+        assert!(state.current_drop.is_none());
+        let channel = state
+            .channels
+            .iter()
+            .find(|channel| channel.id == 999)
+            .unwrap();
+        assert!(!channel.online && !channel.watching);
+        assert!(channel.avatar_url.is_some());
+    }
+    // The id path must accept the same offline identity too.
+    intent.send_modify(|v| {
+        v.channel_login = None;
+        v.selected = Some(999);
+        v.manual_revision += 1;
+    });
+    miner.apply_intent(&pool).await;
+    assert_eq!(miner.manual.unwrap().channel, 999);
+    assert!(miner.manual_error.is_none());
+    let id_deadline = miner.manual.unwrap().expires_at.unwrap();
+    assert!(id_deadline >= deadline);
+    miner.event(Event::Changed(999)).await.unwrap();
+    assert!(miner.refresh_channels.contains_key(&999));
+    let mut live = miner
+        .channels
+        .iter()
+        .find(|channel| channel.identity.id == 999)
+        .unwrap()
+        .clone();
+    live.broadcast_id = Some("new-stream".into());
+    let requested_at = miner.refresh_channels[&999];
+    miner
+        .complete(
+            Job::Update {
+                result: Err(TwitchError::InvalidResponse),
+                requested_at,
+            },
+            &pool,
+        )
+        .await
+        .unwrap();
+    assert!(
+        miner.refresh_channels.contains_key(&999),
+        "failed stream reads must keep their scheduled retry"
+    );
+    assert_eq!(miner.manual.unwrap().expires_at, Some(id_deadline));
+    assert!(miner.watching.is_none());
+    miner
+        .complete(
+            Job::Update {
+                result: Ok(vec![live]),
+                requested_at,
+            },
+            &pool,
+        )
+        .await
+        .unwrap();
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(999));
+    assert_eq!(miner.manual.unwrap().expires_at, Some(id_deadline));
+    assert!(miner.watch_channel(&settings).is_some());
+    assert_eq!(
+        miner.app.data.settings().unwrap().games_to_watch,
+        saved.games_to_watch
+    );
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn channel_search_auth_failure_reaches_the_session_owner() {
+    use crate::app::commands::{ChannelQuery, DirectoryRequest};
+    let server = MockServer::start().await;
+    Mock::given(path("/helix/search/channels"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+    let client = TwitchClient::new(Arc::new(http(&server)), &session());
+    let (sender, requests) = mpsc::channel(4);
+    let (complete, result) = oneshot::channel();
+    sender
+        .send(DirectoryRequest::Channels {
+            query: ChannelQuery {
+                search: "streamer".into(),
+            },
+            complete,
+        })
+        .await
+        .unwrap();
+    let (worker, result) = tokio::join!(session::read_directory(client, requests), result);
+    assert_eq!(worker, Err(TwitchError::Unauthorized));
+    assert_eq!(result.unwrap(), Err(TwitchError::Unauthorized));
+    assert!(sender.is_closed());
 }

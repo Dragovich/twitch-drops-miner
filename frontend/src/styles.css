@@ -127,7 +127,7 @@
   line-height: 1.6;
   box-shadow: 0 4px 16px #0004;
 }
-.game-search-popover {
+.search-popover {
   position: fixed;
   flex-direction: column;
   z-index: 50;
@@ -141,10 +141,10 @@
   color: var(--color-text);
   box-shadow: 0 4px 16px #0004;
 }
-.game-search-popover:popover-open {
+.search-popover:popover-open {
   display: flex;
 }
-.game-search-popover[data-fallback-open] {
+.search-popover[data-fallback-open] {
   display: flex;
 }
 @supports (position-area: bottom) {

@@ -1,13 +1,13 @@
 import { Icon } from '@mdi/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { mdiArrowLeft, mdiPriorityHigh, mdiReload } from '@mdi/js';
+import { mdiArrowLeft, mdiPriorityHigh, mdiReload, mdiPlus } from '@mdi/js';
 import type { Settings as SettingsData, GameMetadata } from '../../shared/lib/types';
 import { useMiner } from '../../app/MinerProvider';
 import { useT } from '../../shared/lib/i18n';
 import { GamePriorities } from './GamePriorities';
-import GameSearch from './GameSearch';
-import { lookupGames, useGameSearch } from './useGameSearch';
+import SearchPicker from '../../shared/ui/SearchPicker';
+import { lookupGames, useDirectorySearch } from './useDirectorySearch';
 import {
   ActionResult,
   Button,
@@ -40,7 +40,12 @@ export default function MiningPreferences() {
   }, [draft.drop_name_blacklist, editingIgnored]);
   const [search, setSearch] = useState('');
   const [gameError, setGameError] = useState('');
-  const directory = useGameSearch(search, connected, data?.login.user_id);
+  const directory = useDirectorySearch<GameMetadata>(
+    '/api/games',
+    search,
+    connected,
+    data?.login.user_id,
+  );
   useEffect(() => {
     if (!connected || !data?.login.user_id) return;
     const known = new Set((draft.game_metadata ?? []).map((game) => gameKey(game.name)));
@@ -156,12 +161,16 @@ export default function MiningPreferences() {
             >
               <div className="flex min-h-0 flex-col gap-2">
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                  <GameSearch
+                  <SearchPicker
+                    label={t('gui.settings.search_games')}
+                    actionLabel={t('gui.settings.add_game')}
+                    actionIcon={mdiPlus}
+                    maxLength={100}
                     disabled={!connected}
                     loading={directory.loading}
                     ready={!!gameError || available.length > 0 || directory.complete}
-                    options={available}
-                    onSelect={addGame}
+                    options={available.map((game) => ({ ...game, id: game.name }))}
+                    onSelect={(game) => addGame(game.name, game.metadata)}
                     onResolve={resolveGame}
                     value={search}
                     onChange={(value) => {
@@ -188,7 +197,7 @@ export default function MiningPreferences() {
                         <IconButton path={mdiReload} label={t('retry')} onClick={directory.retry} />
                       </div>
                     )}
-                  </GameSearch>
+                  </SearchPicker>
                   <div
                     className="icon-button has-[:disabled]:opacity-50"
                     title={`${t('mining_priority')}: ${t(`priority_${draft.mining_priority_mode}`)}`}
@@ -247,6 +256,15 @@ export default function MiningPreferences() {
               className="relative min-h-0 min-w-0 focus-visible:bg-field lg:overflow-y-auto"
             >
               <div className="space-y-5">
+                <div className="flex items-center gap-1">
+                  <Check
+                    label={t('auto_claim_drops')}
+                    checked={draft.auto_claim_drops}
+                    disabled={!connected}
+                    onChange={(value) => change('auto_claim_drops', value)}
+                  />
+                  <HelpButton label={t('auto_claim_drops')} text={t('auto_claim_drops_help')} />
+                </div>
                 <fieldset
                   disabled={!connected}
                   aria-label={t('auto_mine_types')}

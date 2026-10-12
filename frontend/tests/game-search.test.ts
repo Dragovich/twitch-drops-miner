@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { lookupGames } from '../src/features/mining/useGameSearch';
+import { lookupGames } from '../src/features/mining/useDirectorySearch';
 
 afterEach(() => vi.unstubAllGlobals());
 

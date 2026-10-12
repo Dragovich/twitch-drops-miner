@@ -18,6 +18,51 @@ const snapshot: Snapshot = {
 const headers = { 'X-TDM-Request': '1' };
 
 for (const width of [1280, 320]) {
+  test(`automatic claiming persists globally with accessible help at ${width}px`, async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?edit=priorities');
+    const control = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
+    const before = await (await request.get('/api/settings')).json();
+    await expect(control).toBeChecked();
+    await control.focus();
+    await control.press('Space');
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(false);
+    await page.reload();
+    await expect(control).not.toBeChecked();
+    const after = await (await request.get('/api/settings')).json();
+    expect(after.games_to_watch).toEqual(before.games_to_watch);
+    expect(after.mining_benefits).toEqual(before.mining_benefits);
+    expect(after.mining_paused).toBe(before.mining_paused);
+    const help = page.getByRole('button', { name: 'Automatically claim drops help', exact: true });
+    await help.focus();
+    await help.press('Enter');
+    const note = page.getByRole('note', { name: 'Automatically claim drops help', exact: true });
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('claim earned drops yourself in your Twitch inventory');
+    await expect(note).toContainText('Some rewards require earlier drops to be claimed.');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(note).toBeHidden();
+    if (width < 768) {
+      expect((await control.locator('..').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    await page.screenshot({ path: `../artifacts/auto-claim-${width}.png` });
+    await control.check();
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(true);
+  });
+}
+
+for (const width of [1280, 320]) {
   test(`mining priority uses a persistent icon selector without rewriting the manual order at ${width}px`, async ({
     page,
     request,
@@ -102,6 +147,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
 }) => {
   await page.goto('/settings#mining');
   const priority = page.getByRole('combobox', { name: 'Mining priority', exact: true });
+  const autoClaim = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -118,6 +164,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   await priority.selectOption('short_events');
   await sent;
   await priority.selectOption('ending_soonest');
+  await autoClaim.uncheck();
   const current = await (await request.get('/api/settings')).json();
   expect(
     (
@@ -130,11 +177,16 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   release();
   await expect(page.getByRole('alert')).toContainText('Settings changed on another device');
   await expect(priority).toHaveValue('ending_soonest');
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).mining_priority_mode).toBe('manual');
+  expect((await (await request.get('/api/settings')).json()).auto_claim_drops).toBe(true);
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect
     .poll(async () => (await (await request.get('/api/settings')).json()).mining_priority_mode)
     .toBe('ending_soonest');
+  await expect
+    .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+    .toBe(false);
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
@@ -151,11 +203,14 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   try {
     await request.post('/__test/reconnect', { headers, data: {} });
     await expect(priority).toBeDisabled();
+    await expect(autoClaim).toBeDisabled();
   } finally {
     await page.context().setOffline(false);
   }
   await expect(priority).toBeEnabled();
   await expect(priority).toHaveValue('short_events');
+  await expect(autoClaim).toBeEnabled();
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
@@ -391,7 +446,7 @@ for (const width of [1280, 320]) {
     await expect(mine).toHaveAttribute('type', 'submit');
     await expect(mine.locator('path')).toHaveAttribute('d', mdiPlayCircleOutline);
     await expect(mine).toBeDisabled();
-    await page.getByRole('textbox', { name: 'Twitch channel name or URL' }).fill('extra_streamer');
+    await page.getByRole('combobox', { name: 'Twitch channel name or URL' }).fill('extra_streamer');
     await expect(mine).toBeEnabled();
     await mine.focus();
     await page.keyboard.press('Enter');
@@ -593,7 +648,7 @@ test('mining confirmation stays beside selection mode inside Now mining', async 
   const refresh = header.getByRole('button', { name: 'Refresh inventory', exact: true });
   for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(confirmed).toContainText('Last confirmed:');
+    await expect(confirmed).toContainText('Confirmed ');
     await expect(confirmed).toHaveAttribute('datetime', snapshot.current_drop!.confirmed_at!);
     await expect(confirmed).toHaveCSS('color', 'rgb(136, 136, 136)');
     await expect(confirmed).toHaveCSS('font-size', '12px');
@@ -626,6 +681,10 @@ for (const width of [1440, 320]) {
     const identity = reward.locator('../..');
     const artwork = identity.locator(':scope > span');
     const text = reward.locator('..');
+    const watching = snapshot.channels.find((channel) => channel.watching)!;
+    const streamerLink = card.getByRole('link', { name: watching.name, exact: true });
+    await expect(streamerLink).toHaveText(watching.name);
+    await expect(streamerLink).toHaveAttribute('href', 'https://www.twitch.tv/northwind');
     for (const title of ['Explorer jacket', 'Explorer jacket and companion reward bundle']) {
       expect(
         (
@@ -638,7 +697,9 @@ for (const width of [1440, 320]) {
       await expect(reward).toHaveText(title);
       const artBox = (await artwork.boundingBox())!;
       const textBox = (await text.boundingBox())!;
-      expect([artBox.width, artBox.height]).toEqual([80, 80]);
+      expect([artBox.width, artBox.height]).toEqual([88, 88]);
+      const avatarBox = (await text.locator('p > span').first().boundingBox())!;
+      expect([avatarBox.width, avatarBox.height]).toEqual([32, 32]);
       expect(artBox.y + artBox.height / 2).toBeCloseTo(textBox.y + textBox.height / 2, 0);
       expect(artBox.x + artBox.width).toBeLessThan(textBox.x);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
@@ -729,7 +790,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
     'No confirmed progress yet',
   );
   await expect(mining.getByRole('progressbar').locator('div')).toHaveCSS('width', '0px');
-  await expect(page.getByText(/Last confirmed:/)).toHaveCount(0);
+  await expect(page.getByText(/Confirmed /)).toHaveCount(0);
   await expect(page.getByText(/Waiting for Twitch progress/)).toHaveCount(0);
 
   await page.goto('/campaigns?campaign=campaign-1');
@@ -746,7 +807,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
     await expect(bar).toHaveAccessibleDescription('No confirmed progress yet');
     await expect(bar.locator('div')).toHaveCSS('width', '0px');
   }
-  await expect(details.getByText(/Last confirmed:|Waiting for Twitch progress/)).toHaveCount(0);
+  await expect(details.getByText(/Confirmed |Waiting for Twitch progress/)).toHaveCount(0);
 
   await request.post('/__test/event', {
     headers,
@@ -759,7 +820,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
   await expect(count).toBeVisible();
   await expect(count).not.toHaveAttribute('title');
   await expect(mining.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
-  await expect(page.getByText(/Last confirmed:/)).toBeVisible();
+  await expect(page.getByText(/Confirmed /)).toBeVisible();
   await request.post('/__test/event', {
     headers,
     data: { event: 'drop_progress_stop', data: {} },
@@ -767,7 +828,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
   await expect(mining.getByText('No confirmed progress yet', { exact: true })).toBeVisible();
   await expect(mining.getByText(/\d+ \/ \d+ min/)).toHaveCount(0);
   await expect(mining.getByRole('progressbar')).toHaveCount(0);
-  await expect(page.getByText(/Last confirmed:/)).toHaveCount(0);
+  await expect(page.getByText(/Confirmed /)).toHaveCount(0);
 });
 test('Up next scrolls within its panel with reward artwork and safe fallbacks', async ({
   page,
@@ -967,8 +1028,14 @@ test('keyboard focus remains visible without outlines across controls', async ({
   );
 });
 test('channel search, clear, selection and automatic mode', async ({ page }) => {
+  const channels = page.getByRole('region', { name: 'Channels', exact: true });
   await page.getByRole('searchbox', { name: 'Search channels' }).fill('HARBOR');
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole('region', { name: 'Now mining', exact: true })
+      .getByRole('link', { name: 'northwind', exact: true }),
+  ).toBeVisible();
   const watch = page.getByRole('button', { name: 'Watch harbor' });
   await expect(watch).toHaveText('');
   await expect(watch).toHaveAttribute('title', 'Watch harbor');
@@ -981,7 +1048,7 @@ test('channel search, clear, selection and automatic mode', async ({ page }) => 
   await automatic.click();
   await expect(page.getByRole('img', { name: 'Automatic selection' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toBeVisible();
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toBeVisible();
 });
 
 test('offline channels with unknown viewers do not crash Overview', async ({ page, request }) => {
@@ -1005,8 +1072,8 @@ test('offline channels with unknown viewers do not crash Overview', async ({ pag
   const row = page
     .locator('.row')
     .filter({ has: page.getByRole('link', { name: 'offline-channel', exact: true }) });
-  await expect(row).toContainText('—');
-  await expect(row.getByRole('button', { name: 'Watch offline-channel' })).toBeDisabled();
+  await expect(row).toContainText('Offline');
+  await expect(row.getByRole('button', { name: 'Watch offline-channel' })).toBeEnabled();
   await request.post('/__test/event', {
     headers,
     data: { event: 'channels_batch_update', data: { channels: [offline] } },
@@ -1937,11 +2004,12 @@ test('channel snapshots replace old rows and allow backend-verified special even
       },
     },
   });
-  await expect(page.getByRole('link', { name: 'event-host', exact: true })).toHaveAttribute(
+  const channels = page.getByRole('region', { name: 'Channels', exact: true });
+  await expect(channels.getByRole('link', { name: 'event-host', exact: true })).toHaveAttribute(
     'href',
     'https://www.twitch.tv/event_host',
   );
-  await expect(page.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
+  await expect(channels.getByRole('link', { name: 'northwind', exact: true })).toHaveCount(0);
 });
 
 test('manual lookup has no preparation message and clears pending state without a reload', async ({
@@ -1954,7 +2022,7 @@ test('manual lookup has no preparation message and clears pending state without 
   await expect(entry).toHaveAttribute('aria-expanded', 'false');
   await entry.click();
   await expect(entry).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('textbox', { name: 'Twitch channel name or URL' }).fill('ronnyberger');
+  await page.getByRole('combobox', { name: 'Twitch channel name or URL' }).fill('ronnyberger');
   const mine = page.getByRole('button', { name: 'Mine', exact: true });
   await expect(mine).toBeEnabled();
   await request.post('/__test/event', {
@@ -2004,7 +2072,7 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
 }) => {
   await request.post('/api/settings', { headers, data: { games_to_watch: ['Other game'] } });
   await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
-  const input = page.getByRole('textbox', { name: 'Twitch channel name or URL' });
+  const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
   const mine = page.getByRole('button', { name: 'Mine', exact: true });
   await expect(input).toHaveAttribute('placeholder', 'Twitch channel name or URL');
   await expect(page.getByText(/Mine an eligible reward from your campaign catalog/)).toHaveCount(0);
@@ -2031,7 +2099,7 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
   );
   await mine.click();
   expect((await selection).postDataJSON().duration_minutes).toBe(15);
-  await expect(page.getByRole('link', { name: 'extra_streamer', exact: true })).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'extra_streamer', exact: true })).toBeVisible();
   await expect(page.getByText('Manual selection', { exact: true })).toBeVisible();
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other game',

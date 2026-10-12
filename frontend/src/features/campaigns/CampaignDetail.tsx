@@ -6,7 +6,15 @@ import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
 import { safeUrl } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
-import { Art, Empty, IconButton, Notice, ProgressBar, dateTime } from '../../shared/ui/index';
+import {
+  Art,
+  Empty,
+  IconButton,
+  Notice,
+  ProgressBar,
+  dateTime,
+  ConfirmedTime,
+} from '../../shared/ui/index';
 
 export function CampaignDetail({
   campaign: liveCampaign,
@@ -202,24 +210,6 @@ export function CampaignDetail({
                   </a>
                 )}
               </div>
-              {!!campaign.allowed_channels?.length && (
-                <div>
-                  <p className="mb-1 font-medium">{t('eligible_channels')}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {campaign.allowed_channels.map((channel) => (
-                      <a
-                        key={channel.login}
-                        className="text-link"
-                        href={`https://www.twitch.tv/${encodeURIComponent(channel.login)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {channel.name}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="divide-y divide-divider">
               {campaign.drops.map((drop) => {
@@ -274,9 +264,7 @@ export function CampaignDetail({
                           })}
                         </p>
                         {drop.confirmed_at && (
-                          <p className="muted">
-                            {t('last_confirmed', { time: dateTime(drop.confirmed_at) })}
-                          </p>
+                          <ConfirmedTime value={drop.confirmed_at} className="muted block" />
                         )}
                       </div>
                     )}
