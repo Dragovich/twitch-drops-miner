@@ -20,7 +20,7 @@
         "login_required": "Connect your Twitch account in Drops Miner first.",
         "paused": "Mining pause saved. Inventory and automatic claims continue.",
         "resumed": "Mining resume saved.",
-        "selected": "Selected <b>{game}</b> for automatic mining. Saved priorities, pause and manual channel selection still apply.",
+        "selected": "Selected {game} for automatic mining. Saved priorities, pause and manual channel selection still apply.",
         "unknown_game": "Game not found. Use its exact name from current campaigns or your saved games.",
         "conflict": "Settings changed while handling the command. Check /status and send it again if needed.",
         "failed": "The command could not be confirmed. Check /status before trying again.",
