@@ -92,21 +92,29 @@
     let revision = (await invoke('desktop_update')).revision;
     const publish = (phase, version, error = null) => invoke('plugin:event|emit', {
       event: 'desktop-update',
-      payload: { ...checked, revision: ++revision, phase, version, error },
+      payload: { ...checked, revision: ++revision, phase, version, error, downloaded: 24_000_000, total: 50_000_000 },
     });
     for (const [phase, text, error] of [
       ['available', 'Version 99.0.0 is available.', null],
       ['downloading', 'Downloading 99.0.0', null],
-      ['ready', 'The update is verified', null],
+      ['ready', 'Verified and ready to install.', null],
       ['failed', 'Try downloading again.', 'download_failed'],
     ]) {
       await publish(phase, '99.0.0', error);
       await wait(() => indicator()?.textContent === 'Update v99.0.0', 'sidebar update link missing');
       document.querySelector('a[href="/activity"]').click();
       indicator().click();
-      await wait(() => maintenance() && !maintenance().hidden && maintenance().textContent.includes(text), 'update link lost the current phase');
-      if (document.querySelector('dialog[open]') || maintenance().querySelector('[role="progressbar"], progress')) {
-        throw new Error('updates opened a dialog or custom download progress bar');
+      await wait(() => maintenance() && !maintenance().hidden && maintenance().textContent.includes(text), `update link lost the ${phase} phase`);
+      if (document.querySelector('dialog[open]')) throw new Error('updates opened a dialog');
+      const progress = maintenance().querySelector('[role="progressbar"]');
+      if (phase === 'downloading') {
+        if (progress?.getAttribute('aria-valuenow') !== '24000000'
+          || progress.getAttribute('aria-valuemax') !== '50000000'
+          || !maintenance().textContent.includes('24.0 / 50.0 MB · 48%')) {
+          throw new Error('update download progress is missing or incorrect');
+        }
+      } else if (progress) {
+        throw new Error('update download progress remains visible outside downloading');
       }
     }
     await invoke('plugin:window|set_size', {
