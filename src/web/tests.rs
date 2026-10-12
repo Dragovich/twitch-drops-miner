@@ -187,6 +187,56 @@ async fn game_directory_requires_dashboard_auth_csrf_and_bounded_queries() {
 }
 
 #[tokio::test]
+async fn campaign_channels_require_dashboard_auth_csrf_and_a_bounded_campaign_query() {
+    let test = TestApp::new("");
+    let cookie = test.enable().await;
+    let headers = [("x-tdm-request", "1")];
+    let query = json!({"campaign_id":"campaign","offset":0});
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/campaigns/channels",
+            query.clone(),
+            "",
+            &headers
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/campaigns/channels",
+            query.clone(),
+            &cookie,
+            &[]
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    for query in [
+        json!({"campaign_id":""}),
+        json!({"campaign_id":"x".repeat(257)}),
+        json!({"campaign_id":"campaign","offset":1}),
+    ] {
+        assert_eq!(
+            test.call(
+                Method::POST,
+                "/api/campaigns/channels",
+                query,
+                &cookie,
+                &headers
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[tokio::test]
 async fn refresh_command_failure_is_retryable_and_disconnected_callers_do_not_cancel_accepted_work()
 {
     use crate::dto::RefreshState;

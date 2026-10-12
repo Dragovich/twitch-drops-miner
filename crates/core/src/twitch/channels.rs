@@ -19,6 +19,44 @@ use crate::{
 };
 
 pub const MAX_CHANNELS: usize = 199;
+
+#[derive(Clone, Debug)]
+pub(crate) struct ChannelStatus {
+    pub channel: Channel,
+    pub online: Option<bool>,
+    pub drops_known: bool,
+}
+
+impl ChannelStatus {
+    fn parse(identity: &ChannelIdentity, stream: &Value, drops: &Value) -> Self {
+        let mut status = Self {
+            channel: Channel::offline(identity.clone(), true),
+            online: None,
+            drops_known: false,
+        };
+        let user = &stream["data"]["user"];
+        if number(&user["id"]) != Some(identity.id) {
+            return status;
+        }
+        match user.get("stream") {
+            Some(Value::Null) => status.online = Some(false),
+            Some(value) if value["id"].as_str().is_some_and(|id| !id.is_empty()) => {
+                update_stream(&mut status.channel, user);
+                status.online = Some(true);
+            }
+            _ => return status,
+        }
+        if let Some(campaigns) = drops["data"]["channel"]["viewerDropCampaigns"].as_array()
+            && campaigns
+                .iter()
+                .all(|c| c["id"].as_str().is_some_and(|id| !id.is_empty()))
+        {
+            status.drops_known = true;
+            status.channel.drops_enabled = !campaigns.is_empty();
+        }
+        status
+    }
+}
 static BEACON: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)"beacon_?url"\s*:\s*"([^"\s]+)""#).unwrap());
 static SETTINGS: LazyLock<Regex> = LazyLock::new(|| {
@@ -58,6 +96,33 @@ pub fn channel_login(input: &str) -> Option<String> {
 }
 
 impl TwitchClient {
+    pub(crate) async fn channel_statuses(
+        &self,
+        channels: &[ChannelIdentity],
+    ) -> Result<Vec<ChannelStatus>, TwitchError> {
+        if channels.is_empty() || channels.len() > 10 {
+            return Err(TwitchError::InvalidResponse);
+        }
+        let queries = channels
+            .iter()
+            .flat_map(|channel| {
+                [
+                    Operation::StreamInfo.request(json!({"channel": channel.login})),
+                    Operation::AvailableDrops.request(json!({"channelID": channel.id.to_string()})),
+                ]
+            })
+            .collect();
+        let responses = self.batch(queries).await?;
+        if responses.len() != channels.len() * 2 {
+            return Err(TwitchError::InvalidResponse);
+        }
+        Ok(channels
+            .iter()
+            .zip(responses.chunks_exact(2))
+            .map(|(identity, response)| ChannelStatus::parse(identity, &response[0], &response[1]))
+            .collect())
+    }
+
     pub async fn resolve_channel(&self, login: &str) -> Result<Option<Channel>, TwitchError> {
         let login = channel_login(login).ok_or(TwitchError::InvalidResponse)?;
         let response = self

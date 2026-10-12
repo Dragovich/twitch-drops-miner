@@ -354,6 +354,14 @@ impl Channel {
         self.broadcast_id.is_some()
     }
 
+    pub fn matches_campaign(&self, game: &Game, allowed: &[ChannelIdentity]) -> bool {
+        self.online()
+            && (game.special() || self.drops_enabled)
+            && (allowed.is_empty() || allowed.iter().any(|c| c.id == self.identity.id))
+            && (self.game.as_ref().is_some_and(|g| g.id == game.id)
+                || game.special() && !allowed.is_empty())
+    }
+
     pub fn view(&self, watching: Option<u64>, campaigns: &[Campaign]) -> ChannelView {
         ChannelView {
             id: self.identity.id,
@@ -593,25 +601,12 @@ impl Campaign {
                 .any(|d| self.drop_eligible(d, &policy, now, before))
     }
 
-    pub fn channel_eligible(&self, channel: &Channel, ignore_channel_status: bool) -> bool {
-        (self.allowed_channels.is_empty()
-            || self
-                .allowed_channels
-                .iter()
-                .any(|c| c.id == channel.identity.id))
-            && (ignore_channel_status
-                || channel.game.as_ref().is_some_and(|g| g.id == self.game.id)
-                || channel.online() && self.game.special() && !self.allowed_channels.is_empty())
-    }
-
     pub fn can_watch(&self, channel: &Channel, settings: &Settings, now: DateTime<Utc>) -> bool {
         self.can_mine(settings, now) && self.matches_channel(channel)
     }
 
     pub fn matches_channel(&self, channel: &Channel) -> bool {
-        channel.online()
-            && (self.game.special() || channel.drops_enabled)
-            && self.channel_eligible(channel, false)
+        channel.matches_campaign(&self.game, &self.allowed_channels)
     }
 
     pub fn can_mine(&self, settings: &Settings, now: DateTime<Utc>) -> bool {
@@ -802,6 +797,7 @@ impl Campaign {
                 .allowed_channels
                 .iter()
                 .map(|channel| AllowedChannel {
+                    id: channel.id,
                     login: channel.login.clone(),
                     name: channel.name.clone(),
                 })
@@ -809,6 +805,7 @@ impl Campaign {
             id: self.id.clone(),
             name: self.name.clone(),
             game_name: self.game.name.clone(),
+            game_id: self.game.id,
             game_box_art_url: self.game.image_url.clone(),
             campaign_url: self.url(),
             link_url: self.link_url.clone(),
@@ -1566,7 +1563,6 @@ mod tests {
         assert!(!c.can_watch(&stream, &selected(), now()));
         stream.broadcast_id = None;
         assert!(!c.can_watch(&stream, &settings, now()));
-        assert!(c.channel_eligible(&stream, true));
         stream = channel();
         c.allowed_channels.clear();
         assert!(!c.can_watch(&stream, &settings, now()));

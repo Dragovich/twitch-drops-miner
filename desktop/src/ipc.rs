@@ -75,6 +75,7 @@ pub enum Request {
     TestTelegram,
     SelectChannel(ChannelSelection),
     Games(GameQuery),
+    CampaignChannels(twitch_drops_miner_core::app::participants::Query),
     History(HistoryQuery),
     HistoryStats,
     VerifyProxy {
@@ -112,6 +113,7 @@ impl Request {
             }
             Self::SelectChannel(selection) => app.select_channel(selection).await?,
             Self::Games(query) => return Ok(json!(app.games(query).await?)),
+            Self::CampaignChannels(query) => return Ok(json!(app.campaign_channels(query).await?)),
             Self::History(query) => return Ok(app.history(query).await),
             Self::HistoryStats => return Ok(app.history.lock().await.stats()),
             Self::VerifyProxy { proxy } => return app.verify_proxy(&proxy).await,

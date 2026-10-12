@@ -325,6 +325,9 @@ pub(super) async fn run_generation(
     let (queries, requests) = mpsc::channel(4);
     *app.game_queries.write().await = Some(queries);
     let directory = game_directory(client.clone(), requests);
+    let (queries, requests) = mpsc::channel(4);
+    *app.participant_queries.write().await = Some(queries);
+    let participants = crate::app::participants::run(client.clone(), requests);
     let mut mining = Mining::new(app.clone(), client, journal, intent, receiver);
     {
         let saved = resume.lock().await;
@@ -349,11 +352,13 @@ pub(super) async fn run_generation(
             biased;
             result = with_profile => result,
             result = directory => result,
+            result = participants => result,
         }
     };
     *resume.lock().await = mining.resume();
     cancel.cancel();
     *app.game_queries.write().await = None;
+    *app.participant_queries.write().await = None;
     // Owned jobs include durable claim writes. Cancellation stops network work,
     // while any confirmed claim finishes its disk transaction before logout.
     while mining.jobs.join_next().await.is_some() {}
