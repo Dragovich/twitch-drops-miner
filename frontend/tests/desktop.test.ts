@@ -25,29 +25,43 @@ it('routes only supported native requests and preserves history filters', () => 
     kind: 'history',
     value: { campaign_id: 'one', limit: 25 },
   });
+  expect(nativeRequest('/api/telegram', undefined, 'GET')).toEqual({ kind: 'telegram' });
+  expect(nativeRequest('/api/telegram/bot', undefined, 'GET')).toEqual({ kind: 'telegram_bot' });
+  expect(nativeRequest('/api/telegram', { revision: 'r', token: 'fake' }, 'POST')).toEqual({
+    kind: 'save_telegram',
+    value: { revision: 'r', token: 'fake' },
+  });
+  expect(nativeRequest('/api/telegram/test', {}, 'POST')).toEqual({ kind: 'test_telegram' });
+  expect(nativeRequest('/api/channels/search', { search: 'streamer' }, 'POST')).toEqual({
+    kind: 'search_channels',
+    value: { search: 'streamer' },
+  });
   expect(() => nativeRequest('/api/auth/settings', {}, 'POST')).toThrow();
   expect(() => nativeRequest('/api/history?limit=NaN', undefined, 'GET')).toThrow();
 });
 
-it('cancels native requests and rejects late search results', async () => {
-  let resolve!: (value: unknown) => void;
-  vi.mocked(invoke).mockImplementation((command) =>
-    command === 'app_request'
-      ? new Promise((done) => {
-          resolve = done;
-        })
-      : Promise.resolve(),
-  );
-  const controller = new AbortController();
-  const pending = desktopRequest('/api/games', { query: 'Rust' }, 'POST', controller.signal);
-  controller.abort();
-  resolve([]);
-  await expect(pending).rejects.toHaveProperty('name', 'AbortError');
-  expect(invoke).toHaveBeenCalledWith(
-    'cancel_request',
-    expect.objectContaining({ id: expect.any(String) }),
-  );
-});
+it.each(['/api/games', '/api/channels/search'])(
+  'cancels native %s requests and rejects late search results',
+  async (path) => {
+    let resolve!: (value: unknown) => void;
+    vi.mocked(invoke).mockImplementation((command) =>
+      command === 'app_request'
+        ? new Promise((done) => {
+            resolve = done;
+          })
+        : Promise.resolve(),
+    );
+    const controller = new AbortController();
+    const pending = desktopRequest(path, { search: 'Rust' }, 'POST', controller.signal);
+    controller.abort();
+    resolve([]);
+    await expect(pending).rejects.toHaveProperty('name', 'AbortError');
+    expect(invoke).toHaveBeenCalledWith(
+      'cancel_request',
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+  },
+);
 
 it('does not let a closed subscription replace the remounted dashboard', async () => {
   let finish!: (value: unknown) => void;

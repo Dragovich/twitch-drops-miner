@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type WebSocketRoute } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fixture from './fixture.json' with { type: 'json' };
 
@@ -1415,39 +1415,146 @@ test('history-only reward links resolve and stale responses cannot restore a cle
   ).toHaveCount(0);
 });
 
-test('reload restores a nested draft for review without overwriting unrelated settings', async ({
+test('a missed publication resyncs stale mining state without losing an unsaved edit', async ({
   page,
   request,
 }) => {
+  let upgraded = false;
+  let dropNextPatch = false;
+  let dropped = false;
+  let resyncs = 0;
+  await page.routeWebSocket('**/socket.io/**', (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      if (message === '5') upgraded = true;
+      if (message.toString().startsWith('42["state_resync"')) resyncs++;
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      if (dropNextPatch && message.toString().startsWith('42["state_patch"')) {
+        dropNextPatch = false;
+        dropped = true;
+      } else socket.send(message);
+    });
+  });
+  await page.goto('/settings#connection');
+  await expect.poll(() => upgraded).toBe(true);
+  await page.route('**/api/settings', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 503, json: { detail: 'save_failed' } })
+      : route.continue(),
+  );
+  const interval = page.getByLabel('Minimum Refresh Interval (minutes):', { exact: true });
+  await interval.fill('45');
+  await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
+  dropNextPatch = true;
+  await request.post('/__test/event', {
+    headers,
+    data: { event: 'initial_state', data: { ...fixture, channels: [], current_drop: null } },
+  });
+  await expect.poll(() => dropped).toBe(true);
+  await request.post('/__test/event', {
+    headers,
+    data: {
+      event: 'channel_add',
+      data: { ...fixture.channels[1], id: 3, name: 'replacement' },
+    },
+  });
+  await expect.poll(() => resyncs).toBe(1);
+  await expect(interval).toBeEnabled();
+  await expect(interval).toHaveValue('45');
+  await page.getByRole('link', { name: 'Mining', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Now mining' }).getByRole('progressbar'),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('#channels-list').getByText('replacement', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('#channels-list')).not.toContainText('northwind');
+  await expect(page.locator('#channels-list')).not.toContainText('harbor');
+  await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
+  await page.unroute('**/api/settings');
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get('/api/settings')).json()).minimum_refresh_interval_minutes,
+    )
+    .toBe(45);
+});
+
+test('Reload dashboard preserves real nested edits for review against newer settings', async ({
+  page,
+  request,
+}) => {
+  let upgraded = false;
+  let connection!: WebSocketRoute;
+  await page.routeWebSocket('**/socket.io/**', (socket) => {
+    connection = socket;
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      if (message === '5') upgraded = true;
+      server.send(message);
+    });
+  });
   await page.goto('/?edit=priorities');
   await expect(page.getByRole('combobox', { name: 'Mining priority' })).toBeEnabled();
-  const before = await (await request.get('/api/settings')).json();
-  await page.evaluate(
-    (revision) =>
-      sessionStorage.setItem(
-        'tdm.settings-draft',
-        JSON.stringify({
-          revision,
-          expires: Date.now() + 600000,
-          changes: { mining_benefits: { BADGE: false }, inventory_filters: { show_active: false } },
-        }),
-      ),
-    before.revision,
+  await expect.poll(() => upgraded).toBe(true);
+  await page.route('**/api/settings', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 503, json: { detail: 'save_failed' } })
+      : route.continue(),
   );
-  await page.reload();
+  const allowed = page.getByRole('group', { name: 'Allowed reward types', exact: true });
+  await allowed.getByRole('checkbox', { name: 'Badges', exact: true }).uncheck();
+  await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
+  await page.getByRole('link', { name: 'Campaigns', exact: true }).click();
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Active', exact: true }).uncheck();
+  await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
+  connection.send('42["protocol_mismatch",{"protocol":3}]');
+  const reload = page.getByRole('button', { name: 'Reload dashboard', exact: true });
+  await expect(reload).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeDisabled();
+  await page.unroute('**/api/settings');
+  page.once('dialog', (dialog) => dialog.accept());
+  await Promise.all([page.waitForEvent('load'), reload.click()]);
   await expect(page.getByRole('alert')).toContainText('Your unsaved edits were restored');
-  await expect(
-    page
-      .getByRole('group', { name: 'Allowed reward types', exact: true })
-      .getByRole('checkbox', { name: 'Badges', exact: true }),
-  ).not.toBeChecked();
+  const before = await (await request.get('/api/settings')).json();
+  expect(before.mining_benefits.BADGE).toBe(true);
+  expect(before.inventory_filters.show_active).toBe(true);
+  expect(
+    (
+      await request.post('/api/settings', {
+        headers,
+        data: {
+          revision: before.revision,
+          mining_benefits: { EMOTE: false },
+          inventory_filters: { show_upcoming: false },
+          connection_quality: 5,
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.getByRole('link', { name: 'Mining', exact: true }).click();
+  await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await expect(allowed.getByRole('checkbox', { name: 'Badges', exact: true })).not.toBeChecked();
+  await expect(allowed.getByRole('checkbox', { name: 'Emotes', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('alert')).toContainText('Your unsaved edits were restored');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect
     .poll(async () => (await (await request.get('/api/settings')).json()).mining_benefits.BADGE)
     .toBe(false);
   const saved = await (await request.get('/api/settings')).json();
-  expect(saved.inventory_filters.show_active).toBe(false);
-  expect(saved.inventory_filters.show_upcoming).toBe(before.inventory_filters.show_upcoming);
-  expect(saved.mining_benefits.EMOTE).toBe(before.mining_benefits.EMOTE);
-  expect(await page.evaluate(() => sessionStorage.getItem('tdm.settings-draft'))).toBeNull();
+  expect(saved.inventory_filters).toEqual({
+    ...before.inventory_filters,
+    show_active: false,
+    show_upcoming: false,
+  });
+  expect(saved.mining_benefits).toEqual({ ...before.mining_benefits, BADGE: false, EMOTE: false });
+  expect(saved.connection_quality).toBe(5);
+  expect(saved.games_to_watch).toEqual(before.games_to_watch);
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Mining priority' })).toBeEnabled();
+  await expect(page.getByText(/Your unsaved edits were restored/)).toHaveCount(0);
 });

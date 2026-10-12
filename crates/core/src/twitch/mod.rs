@@ -1,7 +1,7 @@
 mod catalog;
 pub mod channels;
 mod diagnostics;
-mod games;
+mod directory;
 pub mod inventory;
 pub mod oauth;
 pub mod operations;
@@ -281,7 +281,7 @@ impl TwitchHttp {
             .as_str()
             .starts_with(self.endpoints.helix.as_str())
         {
-            "twitch_game_directory"
+            "twitch_directory"
         } else if request.url().origin() == self.endpoints.oauth.origin() {
             "twitch_oauth"
         } else if request.method() == Method::POST {

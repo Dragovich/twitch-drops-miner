@@ -187,6 +187,67 @@ async fn game_directory_requires_dashboard_auth_csrf_and_bounded_queries() {
 }
 
 #[tokio::test]
+async fn channel_search_requires_dashboard_auth_csrf_and_bounded_queries() {
+    let test = TestApp::new("");
+    let cookie = test.enable().await;
+    let headers = [("x-tdm-request", "1")];
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            "",
+            &headers
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            &cookie,
+            &[]
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    for query in [
+        json!({"search":""}),
+        json!({"search":"x".repeat(101)}),
+        json!({"search":"streamer\n"}),
+    ] {
+        assert_eq!(
+            test.call(
+                Method::POST,
+                "/api/channels/search",
+                query,
+                &cookie,
+                &headers
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/channels/search",
+            json!({"search":"Rust"}),
+            &cookie,
+            &headers
+        )
+        .await
+        .0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+}
+
+#[tokio::test]
 async fn refresh_command_failure_is_retryable_and_disconnected_callers_do_not_cancel_accepted_work()
 {
     use crate::dto::RefreshState;
@@ -362,6 +423,8 @@ async fn public_assets_and_spa_allowlist_preserve_private_api_boundaries() {
     for path in [
         "/api/reload",
         "/api/cache/clear",
+        "/api/telegram",
+        "/api/telegram/test",
         "/api/close",
         "/api/channels/select",
         "/api/mode/exit-manual",
@@ -427,10 +490,67 @@ async fn public_assets_and_spa_allowlist_preserve_private_api_boundaries() {
 }
 
 #[tokio::test]
+async fn telegram_configuration_is_protected_and_tokens_are_write_only() {
+    let test = TestApp::new("");
+    let token = test.enable().await;
+    for path in ["/api/telegram", "/api/telegram/test"] {
+        assert_eq!(
+            test.call(Method::POST, path, json!({}), "", &[("x-tdm-request", "1")])
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    for path in ["/api/telegram", "/api/telegram/bot"] {
+        assert_eq!(
+            test.call(Method::GET, path, Value::Null, "", &[]).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    let (status, _, body) = test
+        .call(Method::GET, "/api/telegram/bot", Value::Null, &token, &[])
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(serde_json::from_slice::<Value>(&body).unwrap()["bot"].is_null());
+    let revision = test.app.telegram.view().revision;
+    let update =
+        json!({"revision":revision,"enabled":true,"token":"123:private_token","chat_id":"42"});
+    let (status, _, body) = test
+        .call(
+            Method::POST,
+            "/api/telegram",
+            update.clone(),
+            &token,
+            &[("x-tdm-request", "1")],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!String::from_utf8(body).unwrap().contains("private_token"));
+    assert_eq!(
+        test.call(
+            Method::POST,
+            "/api/telegram",
+            update,
+            &token,
+            &[("x-tdm-request", "1")]
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    for path in ["/api/telegram", "/api/settings", "/api/status"] {
+        let (status, _, body) = test.call(Method::GET, path, Value::Null, &token, &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(!String::from_utf8(body).unwrap().contains("private_token"));
+    }
+}
+
+#[tokio::test]
 async fn csrf_origin_and_secret_safe_validation_apply_before_mutation() {
     let test = TestApp::new("https://drops.example.com");
     for path in [
         "/api/reload",
+        "/api/cache/clear",
         "/api/auth/settings",
         "/api/auth/login",
         "/api/oauth/confirm",

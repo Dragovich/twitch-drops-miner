@@ -37,6 +37,7 @@ fn fixture_activity(lines: &[String]) -> Vec<crate::app::activity::ActivityEvent
 
 pub async fn create(directory: PathBuf) -> anyhow::Result<(Arc<App>, JoinHandle<()>)> {
     let (mut app, receiver) = App::open(directory, "")?;
+    app.telegram.disable_for_fixture();
     Arc::get_mut(&mut app).expect("new application").fixture = true;
     reset_state(&app).await?;
     let worker = tokio::spawn(commands(app.clone(), receiver));
@@ -222,12 +223,14 @@ async fn commands(app: Arc<App>, mut receiver: mpsc::Receiver<CommandRequest>) {
                 let mode = {
                     let mut state = app.snapshot.write().await;
                     for channel in &mut state.channels {
-                        channel.watching = channel.id == id;
+                        channel.watching = channel.id == id && channel.online;
                     }
+                    let channel = state.channels.iter().find(|channel| channel.id == id);
                     state.manual_mode = ManualMode {
                         active: true,
-                        game_name: Some("Rust".into()),
-                        channel_name: Some("harbor".into()),
+                        channel_id: Some(id),
+                        game_name: channel.and_then(|channel| channel.game.clone()),
+                        channel_name: channel.map(|channel| channel.name.clone()),
                         expires_at: duration.map(|duration| {
                             chrono::Utc::now() + chrono::Duration::from_std(duration).unwrap()
                         }),
@@ -235,8 +238,16 @@ async fn commands(app: Arc<App>, mut receiver: mpsc::Receiver<CommandRequest>) {
                     };
                     state.manual_mode.clone()
                 };
+                let watching = app
+                    .snapshot
+                    .read()
+                    .await
+                    .channels
+                    .iter()
+                    .find(|channel| channel.watching)
+                    .map(|channel| channel.id);
                 app.sockets
-                    .emit("channel_watching", &json!({"id":id}))
+                    .emit("channel_watching", &json!({"id":watching}))
                     .await;
                 app.sockets.emit("manual_mode_update", &mode).await;
             }
@@ -260,8 +271,15 @@ async fn commands(app: Arc<App>, mut receiver: mpsc::Receiver<CommandRequest>) {
                             c.watching = false;
                         }
                         state.current_drop = None;
-                        state.channels.retain(|c| c.id != 999);
-                        state.channels.push(crate::dto::ChannelView {
+                        let known = state
+                            .channels
+                            .iter()
+                            .find(|channel| channel.login == login)
+                            .cloned();
+                        state.channels.retain(|c| {
+                            c.id != 999 && Some(c.id) != known.as_ref().map(|channel| channel.id)
+                        });
+                        let mut channel = known.unwrap_or(crate::dto::ChannelView {
                             id: 999,
                             login: login.clone(),
                             name: login.clone(),
@@ -272,16 +290,20 @@ async fn commands(app: Arc<App>, mut receiver: mpsc::Receiver<CommandRequest>) {
                             watching: true,
                             ..Default::default()
                         });
+                        channel.watching = channel.online;
+                        state.channels.push(channel);
                         state.channels.clone()
                     };
                     app.sockets
                         .emit("channels_batch_update", &json!({"channels":channels}))
                         .await;
                     app.sockets.emit("drop_progress_stop", &json!({})).await;
+                    let channel = channels.iter().find(|channel| channel.login == login);
                     ManualMode {
                         active: true,
-                        game_name: Some("Other category".into()),
-                        channel_name: Some(login),
+                        channel_id: channel.map(|channel| channel.id),
+                        game_name: channel.and_then(|channel| channel.game.clone()),
+                        channel_name: channel.map(|channel| channel.name.clone()),
                         expires_at: duration.map(|duration| {
                             chrono::Utc::now() + chrono::Duration::from_std(duration).unwrap()
                         }),

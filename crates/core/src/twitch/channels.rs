@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub const MAX_CHANNELS: usize = 199;
+const DIRECTORY_CHANNELS: usize = 100;
 static BEACON: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)"beacon_?url"\s*:\s*"([^"\s]+)""#).unwrap());
 static SETTINGS: LazyLock<Regex> = LazyLock::new(|| {
@@ -63,12 +64,52 @@ impl TwitchClient {
         let response = self
             .gql(Operation::StreamInfo.request(json!({"channel":login})))
             .await?;
-        let user = &response["data"]["user"];
+        let user = response
+            .pointer("/data/user")
+            .ok_or_else(|| diagnostics::invalid("StreamInfo", "missing user", None))?;
+        // Resolver failures can null a stream too; only explicit offline evidence may wait.
+        let live = user
+            .pointer("/stream/id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty());
+        if !live
+            && response["errors"].as_array().is_some_and(|errors| {
+                errors.iter().any(|error| {
+                    user.is_null()
+                        || error["path"].as_array().is_none_or(|path| {
+                            path.is_empty()
+                                || (path[0].as_str() == Some("user")
+                                    && (path.len() == 1
+                                        || matches!(
+                                            path[1].as_str(),
+                                            Some("id" | "login" | "stream")
+                                        )))
+                        })
+                })
+            })
+        {
+            return Err(diagnostics::invalid(
+                "StreamInfo",
+                "channel identity or stream resolver failed",
+                None,
+            ));
+        }
         if user.is_null() {
             return Ok(None);
         }
+        match user.get("stream") {
+            Some(Value::Null) => {}
+            Some(stream) if stream["id"].as_str().is_some_and(|id| !id.is_empty()) => {}
+            _ => {
+                return Err(diagnostics::invalid(
+                    "StreamInfo",
+                    "expected null stream or live broadcast ID",
+                    user.get("stream"),
+                ));
+            }
+        }
         let identity = ChannelIdentity {
-            id: number(&user["id"]).ok_or_else(|| {
+            id: number(&user["id"]).filter(|id| *id > 0).ok_or_else(|| {
                 diagnostics::invalid(
                     "StreamInfo",
                     "user.id must be an unsigned integer",
@@ -117,6 +158,7 @@ impl TwitchClient {
             .filter(|r| r.identity.id == channel.identity.id)
             .unwrap_or_else(|| Channel::offline(channel.identity.clone(), channel.acl_based));
         fresh.acl_based = channel.acl_based;
+        fresh.avatar_url = fresh.avatar_url.or_else(|| channel.avatar_url.clone());
         if fresh.broadcast_id == channel.broadcast_id {
             fresh.beacon_url = channel.beacon_url.clone();
         }
@@ -165,10 +207,17 @@ impl TwitchClient {
         let games: Vec<_> = directories.into_values().collect();
         for games in games.chunks(20) {
             let responses = self
-                .batch(games.iter().map(|g| directory(&g.slug, 20)).collect())
+                .batch(
+                    games
+                        .iter()
+                        .map(|g| directory(&g.slug, DIRECTORY_CHANNELS))
+                        .collect(),
+                )
                 .await?;
             for (game, response) in games.iter().zip(responses) {
-                for edge in values(&response["data"]["game"]["streams"]["edges"]).take(20) {
+                for edge in
+                    values(&response["data"]["game"]["streams"]["edges"]).take(DIRECTORY_CHANNELS)
+                {
                     if let Some(channel) = directory_channel(&edge["node"], game) {
                         channels
                             .entry(channel.identity.id)
@@ -184,9 +233,14 @@ impl TwitchClient {
         }
         if let Some(current) = current
             && let Some(updated) = channels.get_mut(&current.identity.id)
-            && updated.broadcast_id == current.broadcast_id
         {
-            updated.beacon_url = current.beacon_url.clone();
+            updated.avatar_url = updated
+                .avatar_url
+                .take()
+                .or_else(|| current.avatar_url.clone());
+            if updated.broadcast_id == current.broadcast_id {
+                updated.beacon_url = current.beacon_url.clone();
+            }
         }
         let mut channels: Vec<_> = channels.into_values().collect();
         let mineable: Vec<_> = campaigns
@@ -436,6 +490,9 @@ impl TwitchClient {
 }
 
 fn update_stream(channel: &mut Channel, user: &Value) {
+    if let Some(avatar) = super::profile::artwork(&user["profileImageURL"]) {
+        channel.avatar_url = Some(avatar);
+    }
     let stream = &user["stream"];
     let broadcast_id = stream["id"]
         .as_str()
@@ -461,6 +518,7 @@ fn update_stream(channel: &mut Channel, user: &Value) {
 fn directory_channel(raw: &Value, game: &Game) -> Option<Channel> {
     Some(Channel {
         identity: ChannelIdentity::parse(&raw["broadcaster"]).ok()?,
+        avatar_url: super::profile::artwork(&raw["broadcaster"]["profileImageURL"]),
         game: Some(Game::parse(&raw["game"]).unwrap_or_else(|_| game.clone())),
         broadcast_id: Some(raw["id"].as_str().filter(|s| !s.is_empty())?.to_owned()),
         viewers: number(&raw["viewersCount"]),
@@ -591,6 +649,64 @@ mod tests {
             ),
             Some(11)
         );
+    }
+
+    #[tokio::test]
+    async fn directory_discovery_expands_each_game_without_exceeding_channel_bounds() {
+        for game_count in [1, 3] {
+            let server = MockServer::start().await;
+            gql_mock(&server, |query| {
+                assert_eq!(query["operationName"], "DirectoryPage_Game");
+                assert_eq!(query["variables"]["limit"], 100);
+                let game = query["variables"]["slug"].as_str().unwrap()[4..]
+                    .parse::<u64>()
+                    .unwrap();
+                let edges: Vec<_> = (1..=101)
+                    .map(|index| {
+                        let id = game * 1000 + if index == 100 { 99 } else { index };
+                        json!({"node":{
+                            "id":format!("broadcast{id}"), "viewersCount":1000-index,
+                            "broadcaster":{"id":id.to_string(),"login":format!("streamer{id}"),"displayName":format!("Streamer {id}")}
+                        }})
+                    })
+                    .collect();
+                json!({"data":{"game":{"streams":{"edges":edges}}}})
+            })
+            .await;
+            let client = TwitchClient::new(Arc::new(http(&server)), &session());
+            let campaigns: Vec<_> = (0..game_count)
+                .map(|index| {
+                    let mut campaign = Campaign::parse(
+                        &campaign_json(&format!("campaign{index}")),
+                        &HashMap::new(),
+                        Utc::now(),
+                    )
+                    .unwrap();
+                    campaign.allowed_channels.clear();
+                    campaign.game.id = index as u64 + 1;
+                    campaign.game.name = format!("Game {index}");
+                    campaign.game.slug = format!("game{index}");
+                    campaign
+                })
+                .collect();
+            let settings = Settings {
+                games_to_watch: campaigns
+                    .iter()
+                    .rev()
+                    .map(|c| c.game.name.clone())
+                    .collect(),
+                ..Settings::default()
+            };
+            let channels = client.channels(&campaigns, &settings, None).await.unwrap();
+            assert_eq!(channels.len(), (game_count * 99).min(MAX_CHANNELS));
+            assert_eq!(
+                channels[0].game.as_ref().unwrap().name,
+                settings.games_to_watch[0]
+            );
+            assert!(channels.iter().any(|c| c.identity.id % 1000 == 99));
+            assert!(channels.iter().all(|c| c.identity.id % 1000 <= 99));
+            assert_eq!(server.received_requests().await.unwrap().len(), 1);
+        }
     }
 
     #[tokio::test]
@@ -778,6 +894,7 @@ mod tests {
 
     fn channel(id: u64) -> Channel {
         Channel {
+            avatar_url: None,
             identity: ChannelIdentity {
                 id,
                 login: "streamer".into(),
@@ -1406,5 +1523,121 @@ mod tests {
         )
         .await;
         assert!(!client.claim("earned-instance").await.unwrap());
+    }
+    #[tokio::test]
+    async fn manual_offline_lookup_keeps_avatar_and_rejects_unknown_stream_status() {
+        let server = MockServer::start().await;
+        let client = TwitchClient::new(Arc::new(http(&server)), &session());
+        gql_mock(&server, |_| {
+            json!({"data":{"user":{"id":"999", "displayName":"Offline streamer", "stream":null,
+            "profileImageURL":"https://static-cdn.jtvnw.net/channel.png"}}})
+        })
+        .await;
+        let mut channel = client.resolve_channel("streamer").await.unwrap().unwrap();
+        assert!(!channel.online());
+        assert_eq!(
+            channel.avatar_url.as_deref(),
+            Some("https://static-cdn.jtvnw.net/channel.png")
+        );
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            1,
+            "offline lookup never asks for drop metadata"
+        );
+        server.reset().await;
+        gql_mock(
+            &server,
+            |_| json!({"data":{"user":{"id":"999", "stream":null}}}),
+        )
+        .await;
+        client.update_manual_channel(&mut channel).await.unwrap();
+        assert!(
+            channel.avatar_url.is_some(),
+            "missing optional metadata retains the known avatar"
+        );
+        for body in [
+            json!({"data":{}}),
+            json!({"data":{"user":{"id":"999"}}}),
+            json!({"data":{"user":{"id":"999","stream":{}}}}),
+        ] {
+            server.reset().await;
+            gql_mock(&server, move |_| body.clone()).await;
+            assert!(matches!(
+                client.resolve_channel("streamer").await,
+                Err(TwitchError::InvalidResponse)
+            ));
+        }
+    }
+    #[tokio::test]
+    async fn manual_lookup_distinguishes_offline_from_partial_stream_errors() {
+        let server = MockServer::start().await;
+        let client = TwitchClient::new(Arc::new(http(&server)), &session());
+        for path in [
+            Value::Null,
+            json!([]),
+            json!(["user"]),
+            json!(["user", "id"]),
+            json!(["user", "stream"]),
+            json!(["user", "stream", "id"]),
+            json!(["user", "stream", "viewersCount"]),
+        ] {
+            server.reset().await;
+            gql_mock(&server, move |_| {
+                json!({
+                    "data":{"user":{"id":"999","stream":null}},
+                    "errors":[{"message":"server error","path":path}],
+                })
+            })
+            .await;
+            assert!(matches!(
+                client.resolve_channel("streamer").await,
+                Err(TwitchError::InvalidResponse)
+            ));
+        }
+        for path in [
+            json!(["user", "profileImageURL"]),
+            json!(["user", "broadcastSettings", "game"]),
+        ] {
+            server.reset().await;
+            gql_mock(&server, move |_| {
+                json!({
+                    "data":{"user":null},
+                    "errors":[{"message":"server error","path":path}],
+                })
+            })
+            .await;
+            assert!(matches!(
+                client.resolve_channel("streamer").await,
+                Err(TwitchError::InvalidResponse)
+            ));
+        }
+        server.reset().await;
+        gql_mock(&server, |_| json!({"data":{"user":null}})).await;
+        assert!(client.resolve_channel("missing").await.unwrap().is_none());
+        for stream in [Value::Null, json!({"id":"live", "viewersCount":42})] {
+            let mut paths = vec![
+                json!(["user", "profileImageURL"]),
+                json!(["user", "broadcastSettings", "game"]),
+            ];
+            if !stream.is_null() {
+                paths.push(json!(["user", "stream", "viewersCount"]));
+            }
+            for path in paths {
+                server.reset().await;
+                let stream = stream.clone();
+                gql_mock(&server, move |query| match query["operationName"].as_str().unwrap() {
+                    "VideoPlayerStreamInfoOverlayChannel" => json!({
+                        "data":{"user":{"id":"999","stream":stream,"profileImageURL":null,"broadcastSettings":{"game":null}}},
+                        "errors":[{"message":"server error","path":path}],
+                    }),
+                    "DropsHighlightService_AvailableDrops" => json!({"data":{"channel":{"viewerDropCampaigns":[]}}}),
+                    _ => panic!("unexpected operation"),
+                }).await;
+                assert!(
+                    client.resolve_channel("streamer").await.unwrap().is_some(),
+                    "optional metadata failures must not reject a known identity"
+                );
+            }
+        }
     }
 }

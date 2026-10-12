@@ -4,7 +4,11 @@ use chrono::{NaiveDate, NaiveDateTime};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{AppError, Application, Command, commands::GameQuery, message};
+use super::{
+    AppError, Application, Command,
+    commands::{ChannelQuery, DirectoryRequest, GameQuery},
+    message,
+};
 use crate::{config::GameMetadata, dto::SettingsView, store::HistoryFilter};
 
 #[derive(Deserialize)]
@@ -55,14 +59,42 @@ impl Application {
             return Err(AppError::InvalidRequest);
         }
         let sender = self
-            .game_queries
+            .directory_queries
             .read()
             .await
             .clone()
             .ok_or(AppError::Unavailable)?;
         let (complete, result) = tokio::sync::oneshot::channel();
         sender
-            .try_send(super::commands::GameRequest { query, complete })
+            .try_send(DirectoryRequest::Games { query, complete })
+            .map_err(|_| AppError::Unavailable)?;
+        tokio::select! {
+            biased;
+            _ = self.shutdown.cancelled() => Err(AppError::ShuttingDown),
+            result = tokio::time::timeout(Duration::from_secs(12), result) => {
+                result.map_err(|_| AppError::Unavailable)?
+                    .map_err(|_| AppError::Unavailable)?
+                    .map_err(|_| AppError::Unavailable)
+            }
+        }
+    }
+
+    pub async fn search_channels(
+        &self,
+        query: ChannelQuery,
+    ) -> Result<Vec<crate::dto::ChannelSearchResult>, AppError> {
+        if !query.valid() {
+            return Err(AppError::InvalidRequest);
+        }
+        let sender = self
+            .directory_queries
+            .read()
+            .await
+            .clone()
+            .ok_or(AppError::Unavailable)?;
+        let (complete, result) = tokio::sync::oneshot::channel();
+        sender
+            .try_send(DirectoryRequest::Channels { query, complete })
             .map_err(|_| AppError::Unavailable)?;
         tokio::select! {
             biased;
@@ -202,13 +234,48 @@ mod tests {
             Err(AppError::Unavailable)
         ));
         let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
-        *app.game_queries.write().await = Some(sender);
+        *app.directory_queries.write().await = Some(sender);
         let reply = async {
-            let request = receiver.recv().await.unwrap();
-            assert!(matches!(request.query, GameQuery::Search(ref name) if name == "Rust"));
-            request.complete.send(Ok(vec![])).unwrap();
+            let DirectoryRequest::Games { query, complete } = receiver.recv().await.unwrap() else {
+                panic!("unexpected directory request")
+            };
+            assert!(matches!(query, GameQuery::Search(ref name) if name == "Rust"));
+            complete.send(Ok(vec![])).unwrap();
         };
         let (result, _) = tokio::join!(app.games(GameQuery::Search("Rust".into())), reply);
         assert!(result.unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn channel_search_uses_the_owned_queue_and_cancels_when_caller_leaves() {
+        let directory = tempfile::tempdir().unwrap();
+        let (app, _commands) = Application::open(directory.path().into()).unwrap();
+        assert!(matches!(
+            app.search_channels(ChannelQuery { search: " ".into() })
+                .await,
+            Err(AppError::InvalidRequest)
+        ));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
+        *app.directory_queries.write().await = Some(sender);
+        let caller = app.clone();
+        let read = tokio::spawn(async move {
+            caller
+                .search_channels(ChannelQuery {
+                    search: "streamer".into(),
+                })
+                .await
+        });
+        let DirectoryRequest::Channels {
+            query,
+            mut complete,
+        } = receiver.recv().await.unwrap()
+        else {
+            panic!("unexpected directory request")
+        };
+        assert_eq!(query.search, "streamer");
+        read.abort();
+        let _ = read.await;
+        tokio::time::timeout(Duration::from_secs(1), complete.closed())
+            .await
+            .unwrap();
     }
 }

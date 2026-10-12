@@ -1,5 +1,12 @@
 use super::*;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum ClaimOutcome {
+    Claimed,
+    NotClaimed,
+    Disabled,
+}
+
 impl Mining {
     pub(super) async fn recover_claims(
         &mut self,
@@ -26,7 +33,7 @@ impl Mining {
         let rejected_account_ids = self.rejected_account_ids.clone();
         let (pending, recovered) = tokio::task::spawn_blocking(move || {
             let mut journal = journal.blocking_lock();
-            let mut recovered = HashSet::new();
+            let mut recovered = HashMap::new();
             for pending in journal.pending(user_id).into_iter().filter(|p| {
                 p.confirmed
                     || confirmed.contains(&p.entry.id)
@@ -35,9 +42,10 @@ impl Mining {
                         && p.confirmed_by(&awards))
             }) {
                 record_claim(&app, &pending)?;
-                journal.finish(user_id, &pending.entry.id)?;
-                recovered.insert(pending.entry.id.clone());
+                journal.settle(user_id, &pending.entry.id)?;
+                recovered.insert(pending.entry.id.clone(), pending.entry.claimed_at);
             }
+            journal.prune(Utc::now())?;
             Ok::<_, anyhow::Error>((journal.pending(user_id), recovered))
         })
         .await
@@ -45,8 +53,13 @@ impl Mining {
         .map_err(|_| TwitchError::Storage)?;
         self.pending_claims = pending;
         for drop in self.campaigns.iter_mut().flat_map(|c| &mut c.drops) {
-            if recovered.contains(&drop.id) {
-                drop.mark_claimed(Utc::now());
+            if let Some(at) = recovered.get(&drop.id)
+                && self
+                    .unclaimed_inventory
+                    .get(&drop.id)
+                    .is_none_or(|confirmed| *confirmed <= *at)
+            {
+                drop.mark_claimed(*at);
             }
         }
         Ok(())
@@ -58,7 +71,7 @@ pub(super) async fn claim(
     client: &TwitchClient,
     journal: &Arc<Mutex<ClaimJournal>>,
     pending_claim: PendingClaim,
-) -> Result<bool, TwitchError> {
+) -> Result<ClaimOutcome, TwitchError> {
     if pending_claim.user_id != client.user_id {
         return Err(TwitchError::Unauthorized);
     }
@@ -69,6 +82,13 @@ pub(super) async fn claim(
             .await
             .map_err(|_| TwitchError::Storage)?
             .map_err(|_| TwitchError::Storage)?;
+    if pending_claim.settled {
+        return Ok(ClaimOutcome::NotClaimed);
+    }
+    // A settings save can overtake a queued job or its durable intent write.
+    if !pending_claim.confirmed && !app.settings.read().await.auto_claim_drops {
+        return Ok(ClaimOutcome::Disabled);
+    }
     let claimed = pending_claim.confirmed || client.claim(&pending_claim.instance).await?;
     let app = app.clone();
     let journal = journal.clone();
@@ -90,7 +110,11 @@ pub(super) async fn claim(
     .await
     .map_err(|_| TwitchError::Storage)?
     .map_err(|_| TwitchError::Storage)?;
-    Ok(claimed)
+    Ok(if claimed {
+        ClaimOutcome::Claimed
+    } else {
+        ClaimOutcome::NotClaimed
+    })
 }
 
 pub(super) fn record_claim(app: &App, claim: &PendingClaim) -> anyhow::Result<()> {
