@@ -36,6 +36,9 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   const chat = page.getByLabel('Chat ID', { exact: true });
   await expect(enable).toBeEnabled();
   await expect(image).not.toBeChecked();
+  await expect(
+    page.getByRole('checkbox', { name: 'Allow remote control', exact: true }),
+  ).not.toBeChecked();
   await enable.check();
   await image.check();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -92,6 +95,42 @@ test('Telegram saves privately, tests explicitly and removes configuration', asy
   await expect(chat).toHaveValue('');
   await expect(bot).toHaveCount(0);
   expect((await (await request.get('/api/telegram')).json()).token_configured).toBe(false);
+});
+
+test('Remote controls save independently of alerts and require a private chat', async ({
+  page,
+  request,
+}) => {
+  const headers = { 'X-TDM-Request': '1' };
+  await request.post('/__test/reset', { headers, data: {} });
+  const before = await (await request.get('/api/telegram')).json();
+  await request.post('/api/telegram', {
+    headers,
+    data: { revision: before.revision, remove: true },
+  });
+  await page.goto('/settings#notifications');
+  const remote = page.getByRole('checkbox', { name: 'Allow remote control', exact: true });
+  await remote.check();
+  await page.getByLabel('Bot token', { exact: true }).fill('123:offline_controls');
+  await page.getByLabel('Chat ID', { exact: true }).fill('-42');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText(
+    'Remote control requires your positive private chat ID. Group chats can receive alerts only.',
+  );
+  expect((await (await request.get('/api/telegram')).json()).remote_control).toBe(false);
+  await page.getByLabel('Chat ID', { exact: true }).fill('42');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send test', exact: true })).toBeEnabled();
+  await page.reload();
+  await expect(remote).toBeChecked();
+  await expect(
+    page.getByRole('checkbox', { name: 'Notify me when a reward is claimed', exact: true }),
+  ).not.toBeChecked();
+  await expect(page.getByLabel('Bot token', { exact: true })).toHaveValue('');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('button', { name: 'Remove configuration', exact: true }).click();
+  await expect(remote).not.toBeChecked();
 });
 
 test('Telegram reports a configuration conflict without overwriting another client', async ({
