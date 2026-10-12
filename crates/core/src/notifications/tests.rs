@@ -9,6 +9,7 @@ fn update(service: &Telegram) -> Update {
     Update {
         revision: service.view().revision,
         enabled: true,
+        remote_control: false,
         include_image: false,
         token: "123:secret_token".into(),
         chat_id: "42".into(),
@@ -24,7 +25,7 @@ async fn offline_fixture_cannot_deliver_even_after_configuration_changes() {
     service.endpoint = server.uri();
     service.disable_for_fixture();
     service.save(update(&service)).unwrap();
-    for test in [true, false] {
+    for test in [MessageKind::Test, MessageKind::Claim, MessageKind::Reply] {
         assert_eq!(
             service
                 .send(
@@ -291,7 +292,7 @@ async fn sends_html_without_twitch_credentials_and_checks_api_success() {
             "<b>&lt;Reward&gt;</b> &amp; game",
             "",
             &CancellationToken::new(),
-            false,
+            MessageKind::Claim,
             None,
         )
         .await
@@ -319,7 +320,7 @@ async fn sends_html_without_twitch_credentials_and_checks_api_success() {
             "test",
             "",
             &CancellationToken::new(),
-            false,
+            MessageKind::Claim,
             None,
         )
         .await
@@ -434,7 +435,7 @@ async fn rejected_and_ambiguous_responses_are_not_retried_or_followed() {
                     "test",
                     "",
                     &CancellationToken::new(),
-                    false,
+                    MessageKind::Claim,
                     None,
                 )
                 .await,
@@ -467,7 +468,7 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
             "test",
             "",
             &CancellationToken::new(),
-            false,
+            MessageKind::Claim,
             None,
         )
         .await
@@ -477,7 +478,14 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
     service.cancel_pending();
     assert_eq!(
         service
-            .send(epoch, "stale", "", &CancellationToken::new(), false, None)
+            .send(
+                epoch,
+                "stale",
+                "",
+                &CancellationToken::new(),
+                MessageKind::Claim,
+                None
+            )
             .await,
         Err(Error::Cancelled)
     );
@@ -488,7 +496,14 @@ async fn explicit_rate_limit_retries_once_and_configuration_change_cancels_deliv
         .await;
     service.state.lock().unwrap().next_send = Instant::now();
     let cancel = CancellationToken::new();
-    let send = service.send(service.epoch(), "test", "", &cancel, false, None);
+    let send = service.send(
+        service.epoch(),
+        "test",
+        "",
+        &cancel,
+        MessageKind::Claim,
+        None,
+    );
     tokio::pin!(send);
     tokio::select! { result = &mut send => panic!("completed early: {result:?}"), _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
     service.save(update(&service)).unwrap();
@@ -627,7 +642,7 @@ async fn optional_reward_preview_preserves_text_and_only_shares_public_twitch_ar
                 "Drop claimed\n<b>Game</b> \u{2014} Campaign\nReward: <b>&lt;Reward&gt;</b>",
                 "",
                 &CancellationToken::new(),
-                false,
+                MessageKind::Claim,
                 image,
             )
             .await
