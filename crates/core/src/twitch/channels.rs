@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub const MAX_CHANNELS: usize = 199;
+const DIRECTORY_CHANNELS: usize = 100;
 static BEACON: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)"beacon_?url"\s*:\s*"([^"\s]+)""#).unwrap());
 static SETTINGS: LazyLock<Regex> = LazyLock::new(|| {
@@ -165,10 +166,17 @@ impl TwitchClient {
         let games: Vec<_> = directories.into_values().collect();
         for games in games.chunks(20) {
             let responses = self
-                .batch(games.iter().map(|g| directory(&g.slug, 20)).collect())
+                .batch(
+                    games
+                        .iter()
+                        .map(|g| directory(&g.slug, DIRECTORY_CHANNELS))
+                        .collect(),
+                )
                 .await?;
             for (game, response) in games.iter().zip(responses) {
-                for edge in values(&response["data"]["game"]["streams"]["edges"]).take(20) {
+                for edge in
+                    values(&response["data"]["game"]["streams"]["edges"]).take(DIRECTORY_CHANNELS)
+                {
                     if let Some(channel) = directory_channel(&edge["node"], game) {
                         channels
                             .entry(channel.identity.id)
@@ -591,6 +599,64 @@ mod tests {
             ),
             Some(11)
         );
+    }
+
+    #[tokio::test]
+    async fn directory_discovery_expands_each_game_without_exceeding_channel_bounds() {
+        for game_count in [1, 3] {
+            let server = MockServer::start().await;
+            gql_mock(&server, |query| {
+                assert_eq!(query["operationName"], "DirectoryPage_Game");
+                assert_eq!(query["variables"]["limit"], 100);
+                let game = query["variables"]["slug"].as_str().unwrap()[4..]
+                    .parse::<u64>()
+                    .unwrap();
+                let edges: Vec<_> = (1..=101)
+                    .map(|index| {
+                        let id = game * 1000 + if index == 100 { 99 } else { index };
+                        json!({"node":{
+                            "id":format!("broadcast{id}"), "viewersCount":1000-index,
+                            "broadcaster":{"id":id.to_string(),"login":format!("streamer{id}"),"displayName":format!("Streamer {id}")}
+                        }})
+                    })
+                    .collect();
+                json!({"data":{"game":{"streams":{"edges":edges}}}})
+            })
+            .await;
+            let client = TwitchClient::new(Arc::new(http(&server)), &session());
+            let campaigns: Vec<_> = (0..game_count)
+                .map(|index| {
+                    let mut campaign = Campaign::parse(
+                        &campaign_json(&format!("campaign{index}")),
+                        &HashMap::new(),
+                        Utc::now(),
+                    )
+                    .unwrap();
+                    campaign.allowed_channels.clear();
+                    campaign.game.id = index as u64 + 1;
+                    campaign.game.name = format!("Game {index}");
+                    campaign.game.slug = format!("game{index}");
+                    campaign
+                })
+                .collect();
+            let settings = Settings {
+                games_to_watch: campaigns
+                    .iter()
+                    .rev()
+                    .map(|c| c.game.name.clone())
+                    .collect(),
+                ..Settings::default()
+            };
+            let channels = client.channels(&campaigns, &settings, None).await.unwrap();
+            assert_eq!(channels.len(), (game_count * 99).min(MAX_CHANNELS));
+            assert_eq!(
+                channels[0].game.as_ref().unwrap().name,
+                settings.games_to_watch[0]
+            );
+            assert!(channels.iter().any(|c| c.identity.id % 1000 == 99));
+            assert!(channels.iter().all(|c| c.identity.id % 1000 <= 99));
+            assert_eq!(server.received_requests().await.unwrap().len(), 1);
+        }
     }
 
     #[tokio::test]

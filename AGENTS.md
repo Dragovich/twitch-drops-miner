@@ -202,7 +202,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   channels, selected games or opted-in reward types, and eligible rewards. Offline/ineligible streams yield even at tied
   fallback priority. Preserve nullable viewer counts and the watching row during rebuilds.
 - Channels publishes currently eligible selected-game or automatic-reward streams plus the explicitly selected
-  manual channel. Rank automatic candidates before the channel limit using matching campaign
+  manual channel. Directory discovery requests and consumes at most 100 streams per eligible game;
+  retain the overall 199-channel bound and existing PubSub limits. Rank automatic candidates before the channel limit using matching campaign
   priority, including actual-ACL special-category streams. Mine channel accepts a validated
   Twitch login/root URL and resolves it with owned bounded work independently of inventory.
   Manual watching requires a live identity, not catalog coverage, selected games, a drops tag
@@ -507,6 +508,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   match by instant and their upcoming state agrees; retain distinct per-drop dates.
   Channel views may fill missing game artwork from catalog records with the exact same game
   ID. Never change stream identity/eligibility or add network requests for this fallback.
+  Channels paginates 25 rows with header chevrons. Search covers the full list and resets the page;
+  page links survive navigation, clamp to available results and keep the watched stream first.
+  Pagination does not change mining selection or fetch unrelated streams.
   Keep expanded channel-entry controls and feedback inside the scrollable list body.
   Manual lookup has no preparing message; use a play-circle icon submit button with the Mine
   accessible name/tooltip, preserving its busy/disabled state, inline

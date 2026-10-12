@@ -177,6 +177,7 @@
             "connect_help": "Authorize your Twitch account to load campaigns.",
             "waiting_help": "Waiting for an eligible reward and live channel. The miner checks automatically.",
             "search_channels": "Search channels",
+            "channel_pages": "Channel pages",
             "unknown_game": "Unknown game",
             "no_matches": "No matching results",
             "up_next": "Up next",

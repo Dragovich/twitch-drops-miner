@@ -10,6 +10,8 @@ import {
   mdiPlus,
   mdiPause,
   mdiPlay,
+  mdiChevronLeft,
+  mdiChevronRight,
 } from '@mdi/js';
 import { InventoryRefreshButton } from '../../shared/ui/InventoryRefreshButton';
 import { useMiner } from '../../app/MinerProvider';
@@ -39,9 +41,18 @@ export default function Mining() {
     previousEdit.current = edit;
   }, [edit]);
   const search = params.get('q') ?? '';
+  const channelList = useRef<HTMLDivElement>(null);
   function setSearch(value: string) {
     const next = new URLSearchParams(params);
     value ? next.set('q', value) : next.delete('q');
+    next.delete('channels_page');
+    channelList.current?.scrollTo({ top: 0 });
+    setParams(next, { replace: true });
+  }
+  function setChannelPage(page: number) {
+    const next = new URLSearchParams(params);
+    page ? next.set('channels_page', String(page)) : next.delete('channels_page');
+    channelList.current?.scrollTo({ top: 0 });
     setParams(next, { replace: true });
   }
   const [channelInput, setChannelInput] = useState('');
@@ -66,6 +77,11 @@ export default function Mining() {
     .sort(
       (a, b) => Number(b.watching) - Number(a.watching) || (b.viewers ?? -1) - (a.viewers ?? -1),
     );
+  const channelPages = Math.max(1, Math.ceil(channels.length / 25));
+  const requestedPage = Number(params.get('channels_page') ?? 0);
+  const channelPage = Number.isSafeInteger(requestedPage)
+    ? Math.max(0, Math.min(requestedPage, channelPages - 1))
+    : 0;
   return (
     <div className="mining-workspace flex flex-col gap-5 xl:min-h-0 xl:flex-1">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -223,12 +239,31 @@ export default function Mining() {
       <div className="grid gap-5 xl:min-h-[260px] xl:grid-cols-2 xl:flex-1 xl:[contain:size]">
         <section className="panel order-2 flex min-h-0 flex-col overflow-hidden xl:order-1">
           <div className="shrink-0 space-y-4 border-b border-divider p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <h2 id="channels-heading" className="section-title">
                 {t('gui.channels.name')}
               </h2>
               <div className="flex items-center gap-3">
                 <span className="muted tabular-nums">{channels.length}</span>
+                {channelPages > 1 && (
+                  <nav className="flex items-center gap-1" aria-label={t('channel_pages')}>
+                    <IconButton
+                      path={mdiChevronLeft}
+                      label={t('gui.history.previous')}
+                      disabled={channelPage === 0}
+                      onClick={() => setChannelPage(channelPage - 1)}
+                    />
+                    <span className="muted whitespace-nowrap tabular-nums">
+                      {channelPage + 1} / {channelPages}
+                    </span>
+                    <IconButton
+                      path={mdiChevronRight}
+                      label={t('gui.history.next')}
+                      disabled={channelPage + 1 >= channelPages}
+                      onClick={() => setChannelPage(channelPage + 1)}
+                    />
+                  </nav>
+                )}
                 <IconButton
                   path={mdiPlus}
                   label={t('gui.channels.mine_channel')}
@@ -241,6 +276,7 @@ export default function Mining() {
           </div>
           <div
             id="channels-list"
+            ref={channelList}
             data-restore-scroll
             className="scroll-list min-h-0 max-h-[440px] overflow-y-auto focus-visible:bg-field xl:max-h-none xl:flex-1"
             role="region"
@@ -300,7 +336,7 @@ export default function Mining() {
                 {data.manual_mode.error && <Notice error>{data.manual_mode.error}</Notice>}
               </div>
             )}
-            {channels.map((channel) => (
+            {channels.slice(channelPage * 25, (channelPage + 1) * 25).map((channel) => (
               <div className="row flex-wrap sm:flex-nowrap" key={channel.id}>
                 <Art url={channel.game_icon} />
                 <div className="min-w-0 flex-1">
