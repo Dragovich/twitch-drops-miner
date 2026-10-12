@@ -206,8 +206,14 @@ embed it and run without a build tool/runtime companion. Production builds never
   retain the overall 199-channel bound and existing PubSub limits. Rank automatic candidates before the channel limit using matching campaign
   priority, including actual-ACL special-category streams. Mine channel accepts a validated
   Twitch login/root URL and resolves it with owned bounded work independently of inventory.
-  Manual watching requires a live identity, not catalog coverage, selected games, a drops tag
-  or local reward eligibility. Do not persist game selections or fabricate reward progress.
+  Channel search uses authenticated Helix search with at most 20 live/offline results, sharing
+  the owned, bounded game-query queue and generation cancellation through HTTP and native IPC.
+  Search only while the manual picker is open; debounce and cancel superseded requests. Keep
+  exact-login/URL submission available when search misses a channel or fails. Search results
+  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker,
+  Channels and Now mining, with a fallback for missing art; never persist this metadata.
+  Manual selection accepts an existing offline identity and waits for it to go live. Watching
+  requires a live identity, not catalog coverage, selected games, a drops tag or local reward eligibility. Do not persist game selections or fabricate reward progress.
   Direct lookup and manual stream refresh use a short best-effort metadata attempt;
   missing/failed metadata never blocks watching, but auth/cancellation still propagates.
   Show a known manual reward only after Twitch reports it; do not estimate manual rewards.

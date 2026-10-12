@@ -87,6 +87,13 @@ async fn games(
 ) -> Result<Json<Vec<crate::config::GameMetadata>>, ApiError> {
     Ok(Json(app.games(query).await?))
 }
+async fn search_channels(
+    State(app): State<Arc<App>>,
+    Json(query): Json<crate::app::commands::ChannelQuery>,
+) -> Result<Json<Vec<crate::dto::ChannelSearchResult>>, ApiError> {
+    Ok(Json(app.search_channels(query).await?))
+}
+
 impl ApiError {
     fn invalid() -> Self {
         Self(StatusCode::BAD_REQUEST, "invalid_request")
@@ -164,6 +171,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/telegram/bot", get(telegram_bot))
         .route("/api/telegram/test", post(test_telegram))
         .route("/api/games", post(games))
+        .route("/api/channels/search", post(search_channels))
         .route("/api/settings/verify-proxy", post(verify_proxy))
         .route("/api/version", get(version))
         .route("/api/history", get(history))

@@ -25,10 +25,32 @@ impl GameQuery {
     }
 }
 
-pub struct GameRequest {
-    pub query: GameQuery,
-    pub complete:
-        oneshot::Sender<Result<Vec<crate::config::GameMetadata>, crate::twitch::TwitchError>>,
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelQuery {
+    pub search: String,
+}
+
+impl ChannelQuery {
+    pub fn valid(&self) -> bool {
+        !self.search.trim().is_empty()
+            && self.search.len() <= 100
+            && !self.search.chars().any(char::is_control)
+    }
+}
+
+pub enum DirectoryRequest {
+    Games {
+        query: GameQuery,
+        complete:
+            oneshot::Sender<Result<Vec<crate::config::GameMetadata>, crate::twitch::TwitchError>>,
+    },
+    Channels {
+        query: ChannelQuery,
+        complete: oneshot::Sender<
+            Result<Vec<crate::dto::ChannelSearchResult>, crate::twitch::TwitchError>,
+        >,
+    },
 }
 
 #[derive(Clone, Debug)]
