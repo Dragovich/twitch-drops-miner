@@ -693,7 +693,7 @@ for (const width of [1440, 320]) {
       await expect(reward).toHaveText(title);
       const artBox = (await artwork.boundingBox())!;
       const textBox = (await text.boundingBox())!;
-      expect([artBox.width, artBox.height]).toEqual([80, 80]);
+      expect([artBox.width, artBox.height]).toEqual([96, 96]);
       expect(artBox.y + artBox.height / 2).toBeCloseTo(textBox.y + textBox.height / 2, 0);
       expect(artBox.x + artBox.width).toBeLessThan(textBox.x);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(

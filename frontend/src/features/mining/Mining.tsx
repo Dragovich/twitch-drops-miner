@@ -153,7 +153,7 @@ export default function Mining() {
             <div className="flex items-center gap-3 md:gap-4">
               <Art
                 url={reward?.benefits[0]?.image_url || campaign?.game_box_art_url}
-                className="size-20"
+                className="size-24"
                 fit={reward?.benefits[0]?.image_url ? 'contain' : 'cover'}
               />
               <div className="min-w-0 flex-1">
