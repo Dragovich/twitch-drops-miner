@@ -13,7 +13,7 @@ const snapshot = {
   history_revision: 2,
   history_clear_revision: 1,
 } as Snapshot;
-it('coalesces patches, keeps campaign references and clears nullable progress', () => {
+it('replaces channel collections, keeps untouched campaigns and clears nullable progress', () => {
   const current = reducer(initialState, { type: 'snapshot', value: snapshot });
   const patch: StatePatch = {
     protocol: 2,
@@ -25,7 +25,7 @@ it('coalesces patches, keeps campaign references and clears nullable progress', 
   const next = reducer(current, { type: 'patch', value: patch });
   expect(next.hydrated).toBe(true);
   expect(next.data?.campaigns).toBe(current.data?.campaigns);
-  expect(next.data?.channels[0]?.viewers).toBe(777);
+  expect(next.data?.channels).toEqual([{ ...snapshot.channels[0]!, viewers: 777 }]);
   expect(next.data?.current_drop).toBeNull();
   expect(reducer(next, { type: 'patch', value: patch })).toBe(next);
 });

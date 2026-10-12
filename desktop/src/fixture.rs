@@ -9,6 +9,7 @@ use twitch_drops_miner_core::{
 
 pub async fn start(directory: PathBuf) -> anyhow::Result<Runtime> {
     let (app, mut commands) = Application::open(directory)?;
+    app.telegram.disable_for_fixture();
     let mut snapshot: Snapshot =
         serde_json::from_str(include_str!("../../frontend/tests/fixture.json"))?;
     snapshot.settings.refresh_game_keys();

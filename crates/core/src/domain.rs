@@ -329,6 +329,7 @@ impl ChannelIdentity {
 #[derive(Clone, Debug)]
 pub struct Channel {
     pub identity: ChannelIdentity,
+    pub avatar_url: Option<String>,
     pub game: Option<Game>,
     pub broadcast_id: Option<String>,
     pub viewers: Option<u64>,
@@ -341,6 +342,7 @@ impl Channel {
     pub fn offline(identity: ChannelIdentity, acl_based: bool) -> Self {
         Self {
             identity,
+            avatar_url: None,
             game: None,
             broadcast_id: None,
             viewers: None,
@@ -359,6 +361,7 @@ impl Channel {
             id: self.identity.id,
             login: self.identity.login.clone(),
             name: self.identity.name.clone(),
+            avatar_url: self.avatar_url.clone(),
             game: self.game.as_ref().map(|g| g.name.clone()),
             game_id: self.game.as_ref().map(|g| g.id),
             game_icon: self.game.as_ref().and_then(|game| {
@@ -1138,6 +1141,7 @@ mod tests {
     }
     fn channel() -> Channel {
         Channel {
+            avatar_url: None,
             identity: ChannelIdentity {
                 id: 10,
                 login: "streamer".into(),

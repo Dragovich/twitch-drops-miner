@@ -73,14 +73,12 @@ impl Mining {
             self.manual_pending = None;
             self.manual_error = None;
             self.manual = intent.selected.and_then(|id| {
-                self.channels
-                    .iter()
-                    .find(|c| c.identity.id == id && c.online())?;
+                self.channels.iter().find(|c| c.identity.id == id)?;
                 Some(ManualSelection::new(id, intent.manual_duration))
             });
             self.seen.manual_revision = intent.manual_revision;
             if intent.selected.is_some() && self.manual.is_none() {
-                self.manual_error = Some(message("gui.channels.offline", &[]));
+                self.manual_error = Some(message("gui.channels.not_found", &[]));
             }
             self.publish = true;
         }
@@ -321,7 +319,7 @@ impl Mining {
             self.manual = None;
             self.publish = true;
         }
-        let next = select_channel(
+        let mut next = select_channel(
             &self.channels,
             &self.campaigns,
             settings,
@@ -329,6 +327,18 @@ impl Mining {
             self.watching,
             self.manual.map(|manual| manual.channel),
         );
+        self.avoided.retain(|_, until| Instant::now() < *until);
+        if self.manual.is_none() && next.is_some_and(|id| self.avoided.contains_key(&id)) {
+            // Keep a failing stream only when no other eligible stream exists.
+            let others: Vec<_> = self
+                .channels
+                .iter()
+                .filter(|c| !self.avoided.contains_key(&c.identity.id))
+                .cloned()
+                .collect();
+            let current = self.watching.filter(|id| !self.avoided.contains_key(id));
+            next = select_channel(&others, &self.campaigns, settings, now, current, None).or(next);
+        }
         if next != self.watching {
             self.cancel_watch();
             self.playback = None;
@@ -379,9 +389,6 @@ impl Mining {
             Err(_) => return Some("gui.channels.lookup_failed"),
         };
         self.preserve_channel_events(std::slice::from_mut(&mut resolved), requested_at);
-        if !resolved.online() {
-            return Some("gui.channels.offline");
-        }
         let id = resolved.identity.id;
         self.channels.retain(|c| c.identity.id != id);
         self.channels.insert(0, resolved.clone());

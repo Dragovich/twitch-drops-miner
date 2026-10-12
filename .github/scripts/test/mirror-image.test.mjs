@@ -90,10 +90,14 @@ test('mirroring runs after publication or manually on main, with isolated creden
   for (const name of ['docker-release.yml', 'docker-edge.yml']) {
     const caller = readFileSync(new URL(name, workflows), 'utf8');
     assert.match(caller, /mirror:\n    needs: publish\n    uses: \.\/\.github\/workflows\/docker-mirror.yml/);
-    assert.doesNotMatch(caller, /DOCKERHUB_TOKEN/);
+    const mirrorJob = caller.split('\n  mirror:')[1];
+    assert.match(mirrorJob, /\n    secrets:\n      DOCKERHUB_TOKEN: \$\{\{ secrets\.DOCKERHUB_TOKEN \}\}/);
+    assert.doesNotMatch(caller.split('\n  mirror:')[0], /DOCKERHUB_TOKEN/);
+    assert.doesNotMatch(mirrorJob, /secrets: inherit|RELEASE_TOKEN|TAURI_SIGNING_PRIVATE_KEY/);
   }
   assert.match(mirror, /workflow_dispatch:/);
   assert.match(mirror, /workflow_call:/);
+  assert.match(mirror.split('workflow_call:')[1], /\n    secrets:\n      DOCKERHUB_TOKEN:\n        required: true/);
   assert.match(mirror, /github\.repository == 'ohne-b\/twitch-drops-miner' && github\.ref == 'refs\/heads\/main'/);
   assert.match(mirror, /environment: prod/);
   assert.match(mirror, /secrets\.DOCKERHUB_TOKEN/);

@@ -378,3 +378,29 @@ export const dateTime = (value: string, compact = false) =>
       : ({ dateStyle: 'medium', timeStyle: 'short' } as const)),
     hourCycle: 'h23',
   }).format(new Date(value));
+
+export function ConfirmedTime({ value, className }: { value: string; className?: string }) {
+  const t = useT();
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const timer = window.setTimeout(() => setToday(new Date()), midnight.getTime() - Date.now());
+    return () => window.clearTimeout(timer);
+  }, [today]);
+  const date = new Date(value);
+  const time =
+    date.toDateString() === today.toDateString()
+      ? new Intl.DateTimeFormat(undefined, {
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).format(date)
+      : dateTime(value, date.getFullYear() === today.getFullYear());
+  const full = t('last_confirmed', { time: dateTime(value) });
+  return (
+    <time dateTime={value} title={full} aria-label={full} className={className}>
+      {t('last_confirmed', { time })}
+    </time>
+  );
+}

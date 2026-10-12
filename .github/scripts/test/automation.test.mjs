@@ -117,7 +117,8 @@ test('edge publishing is manual, validated-main-only and cannot advance release 
   assert.match(edge, /run: npm --prefix frontend ci/);
   assert.match(edge, /GH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(edge, /node \.github\/scripts\/publish-images\.mjs "\$VERSION" ghcr\.io\/ohne-b\/twitch-drops-miner:edge/);
-  assert.doesNotMatch(edge, /contents: write|:latest|gh release|git push|secrets\./);
+  assert.doesNotMatch(edge, /contents: write|:latest|gh release|git push/);
+  assert.doesNotMatch(edge.split('\n  mirror:')[0], /secrets\./);
   const buildx = /docker\/setup-buildx-action@[a-f0-9]+/;
   assert.equal(edge.match(buildx)?.[0], validation.match(buildx)?.[0]);
   assert.equal(edge.match(buildx)?.[0], release.match(buildx)?.[0]);

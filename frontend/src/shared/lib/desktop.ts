@@ -8,12 +8,17 @@ export function nativeRequest(path: string, data: unknown, method: string) {
   const reads: Record<string, string> = {
     '/api/auth/status': 'auth_status',
     '/api/settings': 'settings',
+    '/api/telegram': 'telegram',
+    '/api/telegram/bot': 'telegram_bot',
     '/api/history/stats': 'history_stats',
   };
   const writes: Record<string, string> = {
     '/api/settings': 'save_settings',
+    '/api/telegram': 'save_telegram',
+    '/api/telegram/test': 'test_telegram',
     '/api/channels/select': 'select_channel',
     '/api/games': 'games',
+    '/api/channels/search': 'search_channels',
     '/api/settings/verify-proxy': 'verify_proxy',
     '/api/reload': 'reload',
     '/api/cache/clear': 'clear_cache',
@@ -39,7 +44,14 @@ export function nativeRequest(path: string, data: unknown, method: string) {
   if (!kind) throw new ApiError(404, 'request_failed');
   return {
     kind,
-    ...(['save_settings', 'select_channel', 'games', 'verify_proxy'].includes(kind)
+    ...([
+      'save_settings',
+      'save_telegram',
+      'select_channel',
+      'games',
+      'search_channels',
+      'verify_proxy',
+    ].includes(kind)
       ? { value: data }
       : {}),
   };

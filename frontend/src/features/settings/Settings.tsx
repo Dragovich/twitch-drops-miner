@@ -1,3 +1,4 @@
+import Telegram from './Telegram';
 import { DesktopUpdates } from './DesktopUpdates';
 import UpdateCheck from './UpdateCheck';
 import { isDesktop } from '../../shared/lib/platform';
@@ -15,6 +16,7 @@ import {
   mdiLanConnect,
   mdiWrenchOutline,
   mdiMonitor,
+  mdiBellOutline,
 } from '@mdi/js';
 import type {
   AuthStatus,
@@ -217,20 +219,10 @@ function ReleaseNotice({ disabled }: { disabled: boolean }) {
           </p>
         )}
       </UpdateCheck>
-      {available && !busy && (
-        <div className="space-y-2">
-          <p className="text-muted">{t('update_manually')}</p>
-          {releaseUrl && (
-            <a
-              className="text-link inline-block"
-              href={releaseUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('release_notes')}
-            </a>
-          )}
-        </div>
+      {available && !busy && releaseUrl && (
+        <a className="text-link inline-block" href={releaseUrl} target="_blank" rel="noreferrer">
+          {t('release_notes')}
+        </a>
       )}
     </div>
   );
@@ -242,9 +234,13 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
   const draft = autosave.draft ?? settings;
   const location = useLocation();
   const section =
-    ['account', isDesktop() ? 'desktop' : 'access', 'connection', 'maintenance'].find(
-      (id) => `#${id}` === location.hash,
-    ) ?? 'account';
+    [
+      'account',
+      isDesktop() ? 'desktop' : 'access',
+      'connection',
+      'notifications',
+      'maintenance',
+    ].find((id) => `#${id}` === location.hash) ?? 'account';
   const [confirmation, setConfirmation] = useState<{
     title: string;
     text: string;
@@ -300,6 +296,7 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
             ['account', mdiAccountOutline],
             isDesktop() ? ['desktop', mdiMonitor] : ['access', mdiShieldLockOutline],
             ['connection', mdiLanConnect],
+            ['notifications', mdiBellOutline],
             ['maintenance', mdiWrenchOutline],
           ] as const
         ).map(([id, icon]) => (
@@ -457,6 +454,7 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
       ) : (
         <Access hidden={section !== 'access'} initial={auth} disabled={dirty || !connected} />
       )}
+      {section === 'notifications' && <Telegram connected={connected} />}
       <Section hidden={section !== 'maintenance'} id="maintenance">
         {isDesktop() ? <DesktopUpdates /> : <ReleaseNotice disabled={!connected} />}
         <div className="flex flex-wrap gap-2">

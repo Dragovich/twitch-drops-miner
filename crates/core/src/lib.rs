@@ -3,6 +3,7 @@ pub mod config;
 pub mod domain;
 pub mod dto;
 pub mod miner;
+pub mod notifications;
 pub mod policy;
 pub mod store;
 pub mod twitch;

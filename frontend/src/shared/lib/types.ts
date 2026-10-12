@@ -60,7 +60,16 @@ export interface Campaign {
   skipped_drops: number;
   drops: Drop[];
 }
+export interface ChannelSearchResult {
+  id: number;
+  login: string;
+  name: string;
+  avatar_url: string | null;
+  online: boolean;
+  game: string | null;
+}
 export interface Channel {
+  avatar_url?: string | null;
   id: number;
   login?: string;
   name: string;
@@ -90,6 +99,7 @@ export interface Settings {
   revision?: string;
   games_to_watch: string[];
   mining_paused: boolean;
+  auto_claim_drops: boolean;
   mining_priority_mode: 'manual' | 'short_events' | 'ending_soonest';
   auto_mine_badges: boolean;
   auto_mine_emotes: boolean;
@@ -165,6 +175,7 @@ export interface WantedGame {
   }[];
 }
 export interface ManualMode {
+  channel_id?: number;
   active: boolean;
   game_name?: string;
   channel_name?: string;

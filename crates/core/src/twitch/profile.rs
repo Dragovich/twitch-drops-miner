@@ -103,7 +103,7 @@ fn text(value: &Value, limit: usize) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn artwork(value: &Value) -> Option<String> {
+pub(super) fn artwork(value: &Value) -> Option<String> {
     let url = Url::parse(&text(value, 2048)?).ok()?;
     (url.scheme() == "https"
         && url.username().is_empty()
