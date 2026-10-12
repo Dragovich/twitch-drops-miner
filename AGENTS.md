@@ -502,8 +502,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   inside Now mining beside the selection mode, in smaller, darker text with readable contrast.
   Omit it when confirmation is unknown; let the card header wrap on phones with an 8px row gap.
   Now mining uses 24px vertical/20px horizontal desktop padding and 16px phone padding.
-  Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with a 96px
+  Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 88px
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
+  Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
   Keep the 6px progress track and 8px count gap. Group the manual return action and timer
   in one wrapping row, preserving phone hit targets. Its empty state adds 20px vertical padding.
   Known rewards without confirmed progress show an empty progress bar and `0 / required minutes`

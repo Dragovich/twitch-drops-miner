@@ -215,6 +215,8 @@ for (const viewport of [
     const mining = page.getByRole('region', { name: 'Now mining', exact: true });
     await expect(mining).toContainText('Waiting for Sleepy Streamer to go live');
     await expect(mining.locator('img')).toHaveAttribute('src', avatar);
+    await expect(mining.locator('img')).toHaveCSS('width', '32px');
+    await expect(mining.locator('img')).toHaveCSS('height', '32px');
     await expect(mining.getByRole('progressbar')).toHaveCount(0);
     await expect(page.getByText(/^Auto mode at /)).toBeVisible();
     expect(await (await request.get('/api/settings')).json()).toEqual(before);

@@ -153,7 +153,7 @@ export default function Mining() {
             <div className="flex items-center gap-3 md:gap-4">
               <Art
                 url={reward?.benefits[0]?.image_url || campaign?.game_box_art_url}
-                className="size-24"
+                className="size-22"
                 fit={reward?.benefits[0]?.image_url ? 'contain' : 'cover'}
               />
               <div className="min-w-0 flex-1">
@@ -169,7 +169,7 @@ export default function Mining() {
                 </p>
                 {watching && !paused && (
                   <p className="muted mt-2 flex items-center gap-2">
-                    <Art url={watching.avatar_url} className="size-6 rounded-full" />
+                    <Art url={watching.avatar_url} className="size-8! rounded-full" />
                     {t('watching', { channel: watching.name })}
                   </p>
                 )}
@@ -211,7 +211,7 @@ export default function Mining() {
           <Empty className="py-5" title={t('paused_help')} />
         ) : data.manual_mode.active ? (
           <div className="flex items-center gap-3">
-            <Art url={(watching ?? manualChannel)?.avatar_url} className="size-12 rounded-full" />
+            <Art url={(watching ?? manualChannel)?.avatar_url} className="size-8! rounded-full" />
             <p className="font-medium">
               {watching
                 ? t('watching', { channel: watching.name })
