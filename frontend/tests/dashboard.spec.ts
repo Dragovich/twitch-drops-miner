@@ -538,6 +538,26 @@ test.beforeEach(async ({ request, page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Mining', exact: true })).toBeVisible();
 });
+test('dashboard policy allows its WebSocket connection', async ({ page }) => {
+  const opened = await page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const url = new URL('/socket.io/?EIO=4&transport=websocket&protocol=2', location.href);
+        url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(url);
+        const finish = (ok: boolean) => {
+          clearTimeout(timer);
+          socket.close();
+          resolve(ok);
+        };
+        const timer = setTimeout(() => finish(false), 5000);
+        socket.onopen = () => finish(true);
+        socket.onerror = () => finish(false);
+      }),
+  );
+  expect(opened).toBe(true);
+});
+
 test('shared logo loads in the dashboard, login and favicon at responsive sizes', async ({
   page,
 }) => {

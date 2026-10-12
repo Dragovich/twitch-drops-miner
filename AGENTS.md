@@ -417,6 +417,10 @@ embed it and run without a build tool/runtime companion. Production builds never
 - `PUBLIC_BASE_URL` is one normalized HTTP(S) root origin. Reject credentials, paths, queries,
   fragments, lists/wildcards and ambiguous numeric IPv4 forms. It controls browser origin/cookie
   scheme, not forwarded client-IP trust. Do not trust proxy headers implicitly.
+- Every dashboard response forbids content sniffing. HTML documents carry a content security
+  policy, the browser counterpart of the desktop one: bundled scripts only, same-origin
+  connections and form targets, images from the bundle, HTTPS or data URIs, and no objects
+  or frames in either direction. Extend it deliberately when the frontend needs a new source.
 - Serve SPA only on explicit dashboard routes. Preserve API/socket 404s. Public login code/fonts
   do not make account data public. HTML revalidates; hashed assets are immutable; private data
   is no-store. Dashboard protection recovery removes only web_auth.json while stopped/restricted.

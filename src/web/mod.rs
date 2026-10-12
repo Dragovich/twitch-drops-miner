@@ -254,13 +254,25 @@ async fn guard(State(app): State<Arc<App>>, mut request: Request, next: Next) ->
     }
     let response = next.run(request).await;
     if asset && response.status().is_success() {
-        response
+        no_sniff(response)
     } else {
         private(response)
     }
 }
 
-fn private(mut response: Response) -> Response {
+// The browser counterpart of the desktop window policy: only bundled code runs, connections
+// stay same-origin, and remote content is limited to HTTPS images such as Twitch artwork.
+const DOCUMENT_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
+fn no_sniff(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(header::X_CONTENT_TYPE_OPTIONS, "nosniff".parse().unwrap());
+    response
+}
+
+fn private(response: Response) -> Response {
+    let mut response = no_sniff(response);
     if !response.headers().contains_key(header::CACHE_CONTROL) {
         response
             .headers_mut()
@@ -280,7 +292,12 @@ fn private(mut response: Response) -> Response {
 struct Assets;
 
 async fn index() -> Response {
-    serve_asset("index.html", false)
+    let mut response = serve_asset("index.html", false);
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        DOCUMENT_POLICY.parse().unwrap(),
+    );
+    response
 }
 async fn login_page(State(app): State<Arc<App>>, headers: HeaderMap) -> Response {
     if app

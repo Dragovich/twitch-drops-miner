@@ -1052,3 +1052,64 @@ async fn both_socket_transports_enforce_origin_and_revocation_before_private_eve
     test.app.sockets.close().await;
     server.abort();
 }
+
+#[tokio::test]
+async fn responses_forbid_sniffing_and_documents_restrict_what_they_load() {
+    let test = TestApp::new("");
+    let asset = super::Assets::iter()
+        .find(|name| name.starts_with("assets/") && name.ends_with(".js"))
+        .unwrap();
+    let asset = format!("/{asset}");
+    for path in [
+        "/",
+        "/api/status",
+        "/healthz",
+        "/api/missing",
+        asset.as_str(),
+    ] {
+        let (_, headers, _) = test.call(Method::GET, path, Value::Null, "", &[]).await;
+        assert_eq!(
+            headers.get("x-content-type-options").map(|v| v.as_bytes()),
+            Some(&b"nosniff"[..]),
+            "{path}"
+        );
+    }
+    let (status, headers, _) = test
+        .call(Method::POST, "/api/reload", json!({}), "", &[])
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+
+    // Socket.IO is served by a layer inside the same guard.
+    let (_, headers, _) = test
+        .call(
+            Method::GET,
+            "/socket.io/?EIO=4&transport=polling",
+            Value::Null,
+            "",
+            &[],
+        )
+        .await;
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+
+    let policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+    for path in ["/", "/campaigns", "/history", "/activity", "/settings"] {
+        let (status, headers, _) = test.call(Method::GET, path, Value::Null, "", &[]).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], policy, "{path}");
+    }
+    let token = test.enable().await;
+    // The public login document is protected too, and so are redirects to it.
+    let (status, headers, _) = test.call(Method::GET, "/login", Value::Null, "", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_SECURITY_POLICY], policy);
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    let (status, headers, _) = test.call(Method::GET, "/", Value::Null, "", &[]).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    let (status, headers, _) = test
+        .call(Method::GET, "/settings", Value::Null, &token, &[])
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_SECURITY_POLICY], policy);
+}
