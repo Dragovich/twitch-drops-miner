@@ -206,6 +206,7 @@ struct Mining {
 impl Mining {
     fn restore(&mut self, saved: &Resume) {
         if saved.user_id == Some(self.client.user_id) {
+            self.avoided = saved.avoided.clone();
             for campaign in &saved.disputed_campaigns {
                 if !self.campaigns.iter().any(|c| c.id == campaign.id) {
                     self.campaigns.push(campaign.clone());
@@ -213,7 +214,6 @@ impl Mining {
             }
         }
         self.manual = saved.manual;
-        self.avoided = saved.avoided.clone();
         self.seen = saved.seen.clone();
         self.lookup = saved.lookup.clone();
         self.manual_pending = saved.lookup.as_ref().map(|(login, _)| login.clone());

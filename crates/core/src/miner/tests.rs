@@ -4773,6 +4773,32 @@ async fn manual_choice_ignores_avoidance_and_never_starts_it() {
 }
 
 #[tokio::test]
+async fn avoidance_survives_renewal_only_for_the_same_account() {
+    let server = MockServer::start().await;
+    let (_dir, mut original, _intent, mut pool) = miner(&server).await;
+    select(&mut original).await;
+    fail_three_watches(&mut original, &pool, 0).await;
+    let mut saved = original.resume();
+    let deadline = saved.avoided[&10];
+    for account in [Some(original.client.user_id), Some(99), None] {
+        let (_dir, mut renewed, _intent, mut renewed_pool) = miner(&server).await;
+        add_channel(&mut renewed, 11, 1);
+        saved.user_id = account;
+        renewed.restore(&saved);
+        select(&mut renewed).await;
+        if account == Some(renewed.client.user_id) {
+            assert_eq!(renewed.avoided.get(&10), Some(&deadline));
+            assert_eq!(renewed.watching, Some(11));
+        } else {
+            assert!(renewed.avoided.is_empty());
+            assert_eq!(renewed.watching, Some(10));
+        }
+        renewed_pool.close().await;
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn avoidance_ends_with_its_cooldown_or_a_cache_clear() {
     let server = MockServer::start().await;
     let (_dir, mut miner, intent, mut pool) = miner(&server).await;

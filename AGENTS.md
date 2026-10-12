@@ -242,7 +242,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   for ten minutes, across the renewal: it ranks the remaining eligible streams normally,
   keeps the current one among equals, and may mine a lower-priority game until the cooldown
   ends. Several streams can be avoided at once; when all eligible streams are, one is still
-  watched. Manual choices are never avoided and their failures never start avoidance; cache
+  watched. Avoidance survives renewal only for the same account. Manual choices are never
+  avoided and their failures never start avoidance; cache
   clear or logout forget it.
   Late request results cannot overwrite newer
   account/stream events or restore invalidated beacon addresses.
