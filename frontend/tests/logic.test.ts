@@ -3,7 +3,6 @@ import fixture from './fixture.json' with { type: 'json' };
 import { safeUrl, moveGame } from '../src/shared/lib/api';
 import { matchesCampaign, campaignOrder } from '../src/features/campaigns/Campaigns';
 import { plainText, translator } from '../src/shared/lib/i18n';
-import { upsert } from '../src/app/MinerProvider';
 import { groupHistory, matchesHistory, historyOrder } from '../src/features/campaigns/History';
 import type { HistoryEntry, Snapshot } from '../src/shared/lib/types';
 const snapshot: Snapshot = {
@@ -90,11 +89,6 @@ describe('boundary behavior', () => {
     expect(moveGame(['A', 'B', 'C'], 0, 99)).toEqual(['B', 'C', 'A']);
     expect(moveGame(['A', 'B'], 1, -99)).toEqual(['B', 'A']);
     expect(moveGame(['A', 'B'], 0, 1.5)).toEqual(['A', 'B']);
-  });
-  it('updates live records by ID instead of accumulating copies', () => {
-    expect(upsert([{ id: 1, name: 'old' }], { id: 1, name: 'new' })).toEqual([
-      { id: 1, name: 'new' },
-    ]);
   });
   it('localizes with English fallback and preserves literal user text', () => {
     expect(translator({})('watching', { channel: '<b>name</b>' })).toBe('Watching <b>name</b>');

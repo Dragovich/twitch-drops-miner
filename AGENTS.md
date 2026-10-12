@@ -29,6 +29,8 @@ the alternate agent instruction files; do not recreate copies or links.
   verify its identity before publishing images. Registry publication retains the workflow's
   built-in token. Keep tokens out of source, logs and chat; never reuse a local CLI credential
   as an Actions secret.
+- Release and edge callers explicitly pass only `DOCKERHUB_TOKEN` to the reusable mirror
+  workflow, which declares it required and reads it from `prod`. Do not inherit all secrets.
 
 ## Architecture
 
@@ -268,9 +270,19 @@ embed it and run without a build tool/runtime companion. Production builds never
   Estimates alone never imply completion or a claim.
 - Claims require account-issued instance IDs, skip upcoming campaigns and stop at the strict
   campaign-end + 24-hour deadline. Earned claims are independent of mining/ignore selection.
+  Global `auto_claim_drops` defaults true, including existing settings. When false, continue
+  watching, inventory imports and confirmed receipt recovery, but do not start claim mutations
+  or replay unconfirmed journal intents. Leave Twitch drop reminders in place while disabled.
+  Recheck the saved setting after intent persistence; an already-started claim may finish
+  and must retain durable results and duplicate protection.
+  Re-enabling resumes eligible claims within their existing deadlines. Only confirmed claims
+  unlock dependent rewards; disabling automatic claims never marks a reward claimed.
   Persist the account-scoped intent before RPC, then its success receipt and history. Keep the
-  receipt until the owner acknowledges domain state and archives completion; reconcile after
-  restart even without catalog metadata. Never retire it before durable history/archive writes.
+  receipt through the claim window after durable history/archive recovery. Settled receipts
+  suppress the same account/drop/instance across refresh, restart and cache clear without
+  overriding fresh unclaimed inventory. A new instance or an explicit false-to-true account
+  linkage permits another attempt, without repeating the reward announcement. Recover unfinished
+  writes even without catalog metadata; prune settled receipts only at the strict claim deadline.
 - History imports Twitch-confirmed claims during inventory refresh, independent of mining
   selection and reward type. Require account claim state or complete in-window award evidence;
   stale local progress must not override newer award evidence. Deduplicate by drop ID and use
@@ -306,6 +318,42 @@ embed it and run without a build tool/runtime companion. Production builds never
   input strings. Bound redaction allocations and never reprocess inserted markers. Preserve
   correlation, timing/status and hashes; mark capture omissions. Keep public errors unchanged,
   and bound retry-body capture to one second without replacing retry/cancellation decisions.
+
+## Telegram notifications
+
+- Optional claimed-only Telegram notifications use the shared core notification channel and
+  an owned runtime worker, separate from Twitch work. Publish after successful durable claims;
+  never notify on estimates, imported history or cache clears. Browser/native notification
+  payloads stay unchanged. A bounded queue and account/drop deduplication make delivery best
+  effort; no persistent outbox or restart replay. Hourly Twitch renewal does not restart it.
+- `telegram.json` stores enabled/token/numeric chat ID separately from public settings. Use
+  atomic private writes and revision conflicts; unreadable files remain untouched with Telegram
+  disabled. Tokens are write-only, omitted from snapshots/IPC reads, logs and browser drafts.
+  Blank input retains the saved token; explicit Remove configuration clears it. Accepted saves
+  are owned and drained. Configuration changes and Twitch logout fence/cancel pending delivery.
+- The isolated Telegram client uses the configured proxy, fixed HTTPS API host, no redirects,
+  no Twitch headers/cookies, bounded messages/responses/timeouts and serialized paced sends.
+  Only explicit bounded 429 responses retry once; ambiguous delivery failures never replay.
+  Automatic messages wait cancellably behind a test; tests are single-flight. Failures cannot
+  stop mining or undo claims. Activity failures collapse; successful deliveries/tests recover them.
+- Claim alerts use three consecutive lines, with a plain heading and the game and reward bold in HTML.
+  Escape and bound upstream names before formatting; never truncate completed markup.
+- Include image defaults off, including existing Telegram configuration. Enabled claim alerts
+  keep the same text and request a compact Telegram link preview for validated public
+  HTTPS Twitch artwork; missing/unsafe artwork stays text-only. Telegram controls rendering.
+  Never upload/download image bodies or add another message; tests remain text-only.
+- Settings > Notifications shares the same save/remove/test application methods through guarded
+  server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
+  additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+  Form errors stay inline without a reload-settings action. Revision conflicts retain edits
+  and explain that reopening Notifications loads the current saved settings.
+- Show the saved bot name as a chat link beside Telegram's heading. Resolve it with a
+  separate best-effort `getMe` read through the isolated client, bounded to three seconds
+  and 64 KiB. Cache validated name/username in memory per configuration; serialize lookups
+  and fence cancelled/stale replies. Keep tokens server-side and lookup failures separate
+  from saves/delivery. Fixtures disable lookup traffic. Save uses the MDI save icon and its
+  disabled state confirms success; omit the saved banner. Remove configuration is an
+  accessible, icon-only delete action; retain inline errors and test-send feedback.
 
 ## Authentication and storage
 
@@ -365,6 +413,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   with the selector for assistive technology, and help available during reconnects. Use concise
   labels: Also mine from other games, Allowed reward types and Ignore rewards by name. Keep
   the two reward groups distinct and preserve all existing settings/mining behavior.
+  Mining preferences also contains the global Automatically claim drops checkbox, using shared
+  autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
+  expiry, prerequisites, outstanding claims on re-enable and already-started requests.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox
@@ -434,7 +485,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   anchor-scrolling the title or navigation out of view.
 - Pause is a saved `mining_paused` setting, default false. It gates automatic and manual
   watch events and progress polling, cancels an in-flight watch and fences late results.
-  Inventory refreshes and earned claims continue. Preserve selected games and the current
+  Inventory refreshes and enabled automatic claims continue. Preserve selected games and the current
   reward; manual timers still expire. The Now mining header becomes Paused with a resume
   action beside the selection mode. Settings save failures must not pretend mining stopped.
   A saved resume request keeps the card and title paused, with the control busy, until the
@@ -489,7 +540,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   CSV/JSON export, Since filter or separate history clear action. Clear all cache clears history
   and publishes the durable change to open dashboards; archives never recreate cleared rows.
 - History artwork is optional; retain old rows and use matching live benefits as display fallback.
-  No Telegram controls/API/credentials in responses and no server-dashboard installer/updater.
+  Telegram credentials never appear in responses; no server-dashboard installer/updater.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games
@@ -622,9 +673,9 @@ Cargo manifest/lock own the version. Prepare release opens a draft PR; a maintai
 the same local release script and draft-PR process if its token is unavailable. Publish is manual from
 validated main and uses reviewed CHANGELOG notes/GHCR. Every release attaches and verifies
 `latest.json` before publishing; stable releases alone move the latest pointer. Use scoped
-conventional commit messages and concise release change lists. The release script owns the
-single `Changelog:` link and issue footer; do not duplicate them in CHANGELOG entries.
-Accept exact-commit push or manual validation.
+conventional commit messages and concise release change lists, with relevant PR links in parentheses.
+The release script owns the single `Changelog:` link and issue footer; do not duplicate them
+in CHANGELOG entries. Accept exact-commit push or manual validation.
 Publish first to GHCR at ghcr.io/ohne-b/twitch-drops-miner using the scoped workflow token.
 Then mirror the published image to Docker Hub through the shared main-only `prod` workflow.
 Use the configured repository/username variables and token secret; never expose credentials

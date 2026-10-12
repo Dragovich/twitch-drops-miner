@@ -196,6 +196,7 @@ pub(super) async fn publish_login(app: &App, mut login: Login) {
     state.login = login;
 }
 pub(super) async fn reset_session(app: &App) {
+    app.telegram.cancel_pending();
     let archived = app.archive.lock().await.merge(vec![], Utc::now());
     {
         let mut state = app.snapshot.write().await;

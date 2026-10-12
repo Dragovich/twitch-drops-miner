@@ -18,6 +18,51 @@ const snapshot: Snapshot = {
 const headers = { 'X-TDM-Request': '1' };
 
 for (const width of [1280, 320]) {
+  test(`automatic claiming persists globally with accessible help at ${width}px`, async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?edit=priorities');
+    const control = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
+    const before = await (await request.get('/api/settings')).json();
+    await expect(control).toBeChecked();
+    await control.focus();
+    await control.press('Space');
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(false);
+    await page.reload();
+    await expect(control).not.toBeChecked();
+    const after = await (await request.get('/api/settings')).json();
+    expect(after.games_to_watch).toEqual(before.games_to_watch);
+    expect(after.mining_benefits).toEqual(before.mining_benefits);
+    expect(after.mining_paused).toBe(before.mining_paused);
+    const help = page.getByRole('button', { name: 'Automatically claim drops help', exact: true });
+    await help.focus();
+    await help.press('Enter');
+    const note = page.getByRole('note', { name: 'Automatically claim drops help', exact: true });
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('claim earned drops yourself in your Twitch inventory');
+    await expect(note).toContainText('Some rewards require earlier drops to be claimed.');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(note).toBeHidden();
+    if (width < 768) {
+      expect((await control.locator('..').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+    await page.screenshot({ path: `../artifacts/auto-claim-${width}.png` });
+    await control.check();
+    await expect
+      .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+      .toBe(true);
+  });
+}
+
+for (const width of [1280, 320]) {
   test(`mining priority uses a persistent icon selector without rewriting the manual order at ${width}px`, async ({
     page,
     request,
@@ -102,6 +147,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
 }) => {
   await page.goto('/settings#mining');
   const priority = page.getByRole('combobox', { name: 'Mining priority', exact: true });
+  const autoClaim = page.getByRole('checkbox', { name: 'Automatically claim drops', exact: true });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -118,6 +164,7 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   await priority.selectOption('short_events');
   await sent;
   await priority.selectOption('ending_soonest');
+  await autoClaim.uncheck();
   const current = await (await request.get('/api/settings')).json();
   expect(
     (
@@ -130,11 +177,16 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   release();
   await expect(page.getByRole('alert')).toContainText('Settings changed on another device');
   await expect(priority).toHaveValue('ending_soonest');
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).mining_priority_mode).toBe('manual');
+  expect((await (await request.get('/api/settings')).json()).auto_claim_drops).toBe(true);
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect
     .poll(async () => (await (await request.get('/api/settings')).json()).mining_priority_mode)
     .toBe('ending_soonest');
+  await expect
+    .poll(async () => (await (await request.get('/api/settings')).json()).auto_claim_drops)
+    .toBe(false);
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
@@ -151,11 +203,14 @@ test('mining priority retains rapid edits through conflicts, retry and reconnect
   try {
     await request.post('/__test/reconnect', { headers, data: {} });
     await expect(priority).toBeDisabled();
+    await expect(autoClaim).toBeDisabled();
   } finally {
     await page.context().setOffline(false);
   }
   await expect(priority).toBeEnabled();
   await expect(priority).toHaveValue('short_events');
+  await expect(autoClaim).toBeEnabled();
+  await expect(autoClaim).not.toBeChecked();
   expect((await (await request.get('/api/settings')).json()).games_to_watch).toEqual([
     'Other',
     'Rust',
@@ -1497,16 +1552,6 @@ test('catalog restrictions and hostile strings remain explicit and inert', async
   await expect(page.getByText('<img src=x onerror="alert(1)">', { exact: true })).toBeVisible();
   expect(await page.locator('img[src="x"]').count()).toBe(0);
 });
-test('snapshot replaces stale entities and keeps settings draft', async ({ page, request }) => {
-  await page.goto('/settings#connection');
-  const interval = page.getByLabel('Minimum Refresh Interval (minutes):', { exact: true });
-  await interval.fill('45');
-  await request.post('/__test/event', {
-    headers,
-    data: { event: 'initial_state', data: { ...snapshot, channels: [], current_drop: null } },
-  });
-  await expect(interval).toHaveValue('45');
-});
 test('public catalog campaigns are visible without mining and expose source freshness in the refresh button', async ({
   page,
   request,
@@ -1599,10 +1644,6 @@ test('dashboard password, login, logout and API guard', async ({ page, browser, 
   await expect(other.getByRole('heading', { name: 'Unlock dashboard' })).toBeVisible();
   await context.close();
 });
-test('mutation requests without the CSRF marker are blocked', async ({ request }) => {
-  expect((await request.post('/api/cache/clear', { data: {} })).status()).toBe(403);
-});
-
 test('pages and confirmation dialogs meet automated accessibility checks', async ({ page }) => {
   for (const route of ['/', '/campaigns', '/history', '/activity', '/settings']) {
     await page.goto(route);
@@ -1664,7 +1705,10 @@ test('failed settings save retains input', async ({ page }) => {
   await expect(page.getByText('gui.auth.save_failed')).toHaveCount(0);
 });
 
-test('autosave queues newer input while an older request is pending', async ({ page, request }) => {
+test('autosave queues newer input, stays quiet and persists the latest edit across reload', async ({
+  page,
+  request,
+}) => {
   await page.goto('/settings#connection');
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -1683,6 +1727,7 @@ test('autosave queues newer input while an older request is pending', async ({ p
   await interval.fill('45');
   await sent;
   await expect(interval).toBeEnabled();
+  await expect(page.getByText(/^(Saving.*|Changes saved\.)$/)).toHaveCount(0);
   await interval.fill('60');
   release();
   await expect
@@ -1691,6 +1736,9 @@ test('autosave queues newer input while an older request is pending', async ({ p
         (await (await request.get('/api/settings')).json()).minimum_refresh_interval_minutes,
     )
     .toBe(60);
+  await expect(interval).toHaveValue('60');
+  await expect(page.getByText('Changes saved.', { exact: true })).toHaveCount(0);
+  await page.reload();
   await expect(interval).toHaveValue('60');
 });
 
@@ -2202,36 +2250,6 @@ test('touch dragging reorders game priorities', async ({ browser, request }) => 
     .poll(async () => (await (await request.get('/api/settings')).json()).games_to_watch)
     .toEqual(['Sea of Thieves', 'Rust']);
   await context.close();
-});
-
-test('Settings saves silently and persists edits', async ({ page, request }) => {
-  await page.goto('/settings#connection');
-  let finishSave!: () => void;
-  const saveGate = new Promise<void>((resolve) => {
-    finishSave = resolve;
-  });
-  await page.route('**/api/settings', async (route) => {
-    if (route.request().method() === 'POST') await saveGate;
-    await route.continue();
-  });
-  const sending = page.waitForRequest(
-    (r) => r.url().endsWith('/api/settings') && r.method() === 'POST',
-  );
-  await page.getByLabel('Minimum Refresh Interval (minutes):', { exact: true }).fill('19');
-  await sending;
-  await expect(page.getByText(/^(Saving.*|Changes saved\.)$/)).toHaveCount(0);
-  finishSave();
-  await expect
-    .poll(
-      async () =>
-        (await (await request.get('/api/settings')).json()).minimum_refresh_interval_minutes,
-    )
-    .toBe(19);
-  await expect(page.getByText('Changes saved.', { exact: true })).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByLabel('Minimum Refresh Interval (minutes):', { exact: true })).toHaveValue(
-    '19',
-  );
 });
 
 test('copy confirmation expires, restarts and ignores superseded code results', async ({

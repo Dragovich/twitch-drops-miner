@@ -110,6 +110,20 @@ own authorization page.
 | **Activity** | Find session events, warnings and errors; filter or follow new events. |
 | **Settings** | View your profile and badges; manage dashboard access, connection and maintenance. |
 
+### Telegram notifications
+
+1. Open [@BotFather](https://t.me/BotFather), send `/newbot` and follow the prompts.
+   Choose a username ending in `bot` and copy the token it gives you.
+2. Open **your new bot** using BotFather's link and send `/start`. It does not need to reply.
+3. In a private browser window, open `https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates`,
+   replacing `YOUR_BOT_TOKEN` with your token. Keep the `bot` prefix.
+4. Find the message you just sent. Copy the number under `message` → `chat` → `id`
+   (for example, `"chat":{"id":123456789,...}`). If `result` is empty, send your bot `hi` and refresh.
+5. In **Settings > Notifications**, enable claim alerts, paste the token and chat ID,
+   select **Save**, then **Send test**.
+
+Keep the token and the URL containing it private. If shared, revoke the token through BotFather.
+
 ## Updating
 
 **Desktop:** use **Check for updates** in the tray menu or **Settings > Maintenance**.

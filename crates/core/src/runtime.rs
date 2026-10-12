@@ -13,6 +13,7 @@ use crate::{
 pub struct Runtime {
     pub app: Arc<Application>,
     worker: Option<JoinHandle<Result<(), TwitchError>>>,
+    notifications: Option<JoinHandle<()>>,
 }
 
 impl Runtime {
@@ -21,10 +22,13 @@ impl Runtime {
         Self {
             app,
             worker: Some(worker),
+            notifications: None,
         }
     }
 
     pub fn start(app: Arc<Application>, commands: mpsc::Receiver<CommandRequest>) -> Self {
+        let events = app.notifications.subscribe();
+        let notifications = tokio::spawn(crate::notifications::run(app.clone(), events));
         let owned = app.clone();
         let worker = tokio::spawn(async move {
             let result = Miner::new(owned.clone(), commands).run().await;
@@ -34,6 +38,7 @@ impl Runtime {
         Self {
             app,
             worker: Some(worker),
+            notifications: Some(notifications),
         }
     }
 
@@ -43,6 +48,10 @@ impl Runtime {
         };
         let result = worker.await;
         self.worker = None;
+        self.app.shutdown.cancel();
+        if let Some(notifications) = self.notifications.take() {
+            let _ = notifications.await;
+        }
         anyhow::ensure!(matches!(result, Ok(Ok(()))), "mining task failed");
         Ok(())
     }
@@ -87,6 +96,7 @@ mod tests {
         let mut runtime = Runtime {
             app,
             worker: Some(worker),
+            notifications: None,
         };
         runtime.shutdown().await.unwrap();
         assert!(written.load(Ordering::SeqCst));

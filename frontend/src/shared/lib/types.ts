@@ -90,6 +90,7 @@ export interface Settings {
   revision?: string;
   games_to_watch: string[];
   mining_paused: boolean;
+  auto_claim_drops: boolean;
   mining_priority_mode: 'manual' | 'short_events' | 'ending_soonest';
   auto_mine_badges: boolean;
   auto_mine_emotes: boolean;
