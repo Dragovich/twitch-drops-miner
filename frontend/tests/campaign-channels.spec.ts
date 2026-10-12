@@ -272,3 +272,30 @@ test('background refresh preserves keyboard focus on a still-fresh Watch action'
   await pending!.fulfill({ json: body });
   await expect(watch).toBeFocused();
 });
+
+test('Escape still closes details in webviews without Popover support', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+      configurable: true,
+      value: undefined,
+    });
+    const original = Element.prototype.querySelector;
+    Object.defineProperty(Element.prototype, 'querySelector', {
+      value: function (selector: string) {
+        if (selector === ':popover-open')
+          throw new DOMException('Unsupported selector', 'SyntaxError');
+        return original.call(this, selector);
+      },
+    });
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockStatuses(page);
+  await page.goto('/campaigns?campaign=campaign-1');
+  const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  await expect(detail).toBeVisible();
+  await detail.getByRole('heading', { name: campaign.name }).focus();
+  await page.keyboard.press('Escape');
+  await expect(detail).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

@@ -73,7 +73,13 @@ export function CampaignDetail({
       className="campaign-detail panel"
       aria-label={t('campaign_details')}
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && !event.currentTarget.querySelector(':popover-open')) {
+        if (
+          event.key === 'Escape' &&
+          !(
+            typeof HTMLElement.prototype.showPopover === 'function' &&
+            event.currentTarget.querySelector(':popover-open')
+          )
+        ) {
           event.stopPropagation();
           close();
         }
