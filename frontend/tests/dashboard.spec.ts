@@ -446,7 +446,7 @@ for (const width of [1280, 320]) {
     await expect(mine).toHaveAttribute('type', 'submit');
     await expect(mine.locator('path')).toHaveAttribute('d', mdiPlayCircleOutline);
     await expect(mine).toBeDisabled();
-    await page.getByRole('textbox', { name: 'Twitch channel name or URL' }).fill('extra_streamer');
+    await page.getByRole('combobox', { name: 'Twitch channel name or URL' }).fill('extra_streamer');
     await expect(mine).toBeEnabled();
     await mine.focus();
     await page.keyboard.press('Enter');
@@ -1060,8 +1060,8 @@ test('offline channels with unknown viewers do not crash Overview', async ({ pag
   const row = page
     .locator('.row')
     .filter({ has: page.getByRole('link', { name: 'offline-channel', exact: true }) });
-  await expect(row).toContainText('—');
-  await expect(row.getByRole('button', { name: 'Watch offline-channel' })).toBeDisabled();
+  await expect(row).toContainText('Offline');
+  await expect(row.getByRole('button', { name: 'Watch offline-channel' })).toBeEnabled();
   await request.post('/__test/event', {
     headers,
     data: { event: 'channels_batch_update', data: { channels: [offline] } },
@@ -2009,7 +2009,7 @@ test('manual lookup has no preparation message and clears pending state without 
   await expect(entry).toHaveAttribute('aria-expanded', 'false');
   await entry.click();
   await expect(entry).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('textbox', { name: 'Twitch channel name or URL' }).fill('ronnyberger');
+  await page.getByRole('combobox', { name: 'Twitch channel name or URL' }).fill('ronnyberger');
   const mine = page.getByRole('button', { name: 'Mine', exact: true });
   await expect(mine).toBeEnabled();
   await request.post('/__test/event', {
@@ -2059,7 +2059,7 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
 }) => {
   await request.post('/api/settings', { headers, data: { games_to_watch: ['Other game'] } });
   await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
-  const input = page.getByRole('textbox', { name: 'Twitch channel name or URL' });
+  const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
   const mine = page.getByRole('button', { name: 'Mine', exact: true });
   await expect(input).toHaveAttribute('placeholder', 'Twitch channel name or URL');
   await expect(page.getByText(/Mine an eligible reward from your campaign catalog/)).toHaveCount(0);

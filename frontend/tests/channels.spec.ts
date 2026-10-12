@@ -118,3 +118,186 @@ test('Campaign details have no streamer list or status lookup', async ({ page, r
     ).status(),
   ).toBe(404);
 });
+
+const avatar = 'https://static-cdn.jtvnw.net/offline-avatar.png';
+const offline = {
+  ...fixture.channels[0]!,
+  id: 801,
+  login: 'sleepy_streamer',
+  name: 'Sleepy Streamer',
+  online: false,
+  watching: false,
+  game: null,
+  viewers: null,
+  avatar_url: avatar,
+};
+const found = [
+  {
+    id: 801,
+    login: offline.login,
+    name: offline.name,
+    online: false,
+    game: null,
+    avatar_url: avatar,
+  },
+  {
+    id: 802,
+    login: 'awake_streamer',
+    name: 'Awake Streamer',
+    online: true,
+    game: 'Rust',
+    avatar_url: null,
+  },
+];
+
+for (const viewport of [
+  { width: 1280, height: 900 },
+  { width: 320, height: 740 },
+  { width: 1024, height: 360 },
+]) {
+  test(`manual Twitch search shows avatars and accepts offline channels at ${viewport.width}px`, async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize(viewport);
+    const queries: unknown[] = [];
+    await page.route('**/api/channels/search', (route) => {
+      queries.push(route.request().postDataJSON());
+      return route.fulfill({ json: found });
+    });
+    await page.route(avatar, (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+          'base64',
+        ),
+      }),
+    );
+    await request.post('/__test/event', {
+      headers,
+      data: { event: 'channels_batch_update', data: { channels: [offline] } },
+    });
+    await page.goto('/');
+    expect(queries).toEqual([]);
+    const before = await (await request.get('/api/settings')).json();
+    await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
+    const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
+    await page.getByRole('spinbutton', { name: 'Auto mode after (minutes, optional)' }).fill('15');
+    await input.fill('sleep');
+    const results = page.getByRole('listbox', { name: 'Twitch channel name or URL' });
+    await expect(results.getByRole('option')).toHaveCount(2);
+    expect(queries).toEqual([{ search: 'sleep' }]);
+    const sleeping = results.getByRole('option').first();
+    await expect(sleeping).toContainText('@sleepy_streamer');
+    await expect(sleeping).toContainText('Offline');
+    await expect(sleeping.locator('img')).toHaveAttribute('src', avatar);
+    await expect(results.getByRole('option').last()).toContainText('Live · Rust');
+    const popup = (await page.locator('.search-popover').boundingBox())!;
+    expect(popup.y).toBeGreaterThanOrEqual(8);
+    expect(popup.y + popup.height).toBeLessThanOrEqual(viewport.height - 8);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({
+      path: `../artifacts/channel-search-${viewport.width}.png`,
+      fullPage: true,
+    });
+    const selection = page.waitForRequest('**/api/channels/select');
+    await input.press('ArrowDown');
+    await input.press('Enter');
+    expect((await selection).postDataJSON()).toEqual({
+      channel: 'sleepy_streamer',
+      duration_minutes: 15,
+    });
+    await expect(results).toBeHidden();
+    const mining = page.getByRole('region', { name: 'Now mining', exact: true });
+    await expect(mining).toContainText('Waiting for Sleepy Streamer to go live');
+    await expect(mining.locator('img')).toHaveAttribute('src', avatar);
+    await expect(mining.getByRole('progressbar')).toHaveCount(0);
+    await expect(page.getByText(/^Auto mode at /)).toBeVisible();
+    expect(await (await request.get('/api/settings')).json()).toEqual(before);
+    await page.screenshot({
+      path: `../artifacts/channel-waiting-${viewport.width}.png`,
+      fullPage: true,
+    });
+    await request.post('/__test/event', {
+      headers,
+      data: {
+        event: 'channels_batch_update',
+        data: { channels: [{ ...offline, online: true, watching: true, game: 'Rust' }] },
+      },
+    });
+    await expect(mining).toContainText('Watching Sleepy Streamer');
+    await expect(mining.locator('img')).toHaveAttribute('src', avatar);
+    await request.post('/__test/event', {
+      headers,
+      data: { event: 'drop_progress', data: fixture.current_drop },
+    });
+    await expect(mining.getByRole('progressbar')).toBeVisible();
+    await expect(mining.locator(`img[src="${avatar}"]`)).toBeVisible();
+    await page.getByRole('button', { name: 'Return to Auto Mode' }).click();
+    await expect(page.getByRole('img', { name: 'Automatic selection', exact: true })).toBeVisible();
+  });
+}
+
+test('manual channel search fences old replies and preserves exact entry after search failure', async ({
+  page,
+}) => {
+  let release!: () => void;
+  const pending = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route('**/api/channels/search', async (route) => {
+    if (route.request().postDataJSON().search === 'old') {
+      await pending;
+      await route.fulfill({ json: found }).catch(() => {});
+    } else {
+      await route.fulfill({ status: 503, json: { error: 'request_failed' } });
+    }
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
+  const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
+  const old = page.waitForRequest('**/api/channels/search');
+  await input.fill('old');
+  await old;
+  await input.fill('https://www.twitch.tv/extra_streamer');
+  await expect(
+    page.getByText('Could not search Twitch. You can still enter an exact channel name or URL.'),
+  ).toBeVisible();
+  release();
+  await expect(page.getByRole('option')).toHaveCount(0);
+  const selection = page.waitForRequest('**/api/channels/select');
+  await input.press('Enter');
+  expect((await selection).postDataJSON().channel).toBe('https://www.twitch.tv/extra_streamer');
+  await expect(page.getByText('Watching extra_streamer', { exact: true })).toBeVisible();
+});
+
+test('choosing a channel suggestion validates the timer before issuing a selection', async ({
+  page,
+}) => {
+  await page.route('**/api/channels/search', (route) => route.fulfill({ json: found }));
+  const selections: unknown[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/channels/select')) selections.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
+  const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
+  const timer = page.getByRole('spinbutton', { name: 'Auto mode after (minutes, optional)' });
+  await timer.fill('0');
+  await input.fill('sleep');
+  await expect(page.getByRole('option')).toHaveCount(2);
+  await input.press('ArrowDown');
+  await input.press('Enter');
+  expect(await timer.evaluate((element: HTMLInputElement) => element.validity.rangeUnderflow)).toBe(
+    true,
+  );
+  expect(selections).toEqual([]);
+  await timer.fill('15');
+  await timer.press('Enter');
+  await expect(page.getByText('Watching sleep', { exact: true })).toBeVisible();
+  expect(selections).toEqual([{ channel: 'sleep', duration_minutes: 15 }]);
+});

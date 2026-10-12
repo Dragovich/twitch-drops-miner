@@ -80,11 +80,14 @@
             "viewers": "viewers",
             "mine_channel": "Mine channel",
             "channel_input": "Twitch channel name or URL",
+            "live": "Live",
+            "search_empty": "No matches. You can still mine an exact channel name or URL.",
+            "search_failed": "Could not search Twitch. You can still enter an exact channel name or URL.",
             "manual_timer": "Auto mode after (minutes, optional)",
             "auto_at": "Auto mode at {time}",
             "waiting_for_live": "Waiting for {channel} to go live",
             "not_found": "That Twitch channel was not found.",
-            "offline": "That channel is offline. Choose a live channel.",
+            "offline": "Offline",
             "lookup_failed": "Could not check that channel with Twitch. Try again."
         },
         "settings": {

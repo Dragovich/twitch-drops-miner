@@ -1,12 +1,16 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { GameMetadata } from '../../shared/lib/types';
-import { mdiPlus } from '@mdi/js';
-import { useT } from '../../shared/lib/i18n';
-import { Art, IconButton, Search } from '../../shared/ui';
+import { Art, IconButton, Search } from './index';
 
-type GameOption = { name: string; image?: string | null; metadata?: GameMetadata };
+type SearchOption = { id: string; name: string; image?: string | null; description?: string };
 
-export default function GameSearch({
+export default function SearchPicker<T extends SearchOption>({
+  label,
+  actionLabel,
+  actionIcon,
+  submit = false,
+  busy = false,
+  roundImages = false,
+  maxLength,
   value,
   onChange,
   options,
@@ -17,27 +21,33 @@ export default function GameSearch({
   ready,
   children,
 }: {
+  label: string;
+  actionLabel: string;
+  actionIcon: string;
+  submit?: boolean;
+  busy?: boolean;
+  roundImages?: boolean;
+  maxLength?: number;
   value: string;
   onChange: (value: string) => void;
-  options: GameOption[];
-  onSelect: (name: string, metadata?: GameMetadata) => void;
+  options: T[];
+  onSelect: (option: T) => void;
   onResolve: () => void;
   disabled: boolean;
   loading: boolean;
   ready: boolean;
   children: ReactNode;
 }) {
-  const t = useT();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const picker = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const [nativePopover] = useState(() => typeof HTMLElement.prototype.showPopover === 'function');
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<{ query: string; name: string } | null>(null);
+  const [active, setActive] = useState<{ query: string; id: string } | null>(null);
   const visible = open && !!value.trim() && ready && !disabled;
   const activeIndex =
-    active?.query === value ? options.findIndex((game) => game.name === active.name) : -1;
+    active?.query === value ? options.findIndex((option) => option.id === active.id) : -1;
 
   function position() {
     const rect = input.current!.getBoundingClientRect();
@@ -106,10 +116,10 @@ export default function GameSearch({
       document.getElementById(`${id}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
   }, [visible, activeIndex, id]);
 
-  function select(game: GameOption) {
+  function select(option: T) {
     setOpen(false);
     setActive(null);
-    onSelect(game.name, game.metadata);
+    onSelect(option);
     input.current?.focus({ preventScroll: true });
   }
 
@@ -133,11 +143,11 @@ export default function GameSearch({
         }
       }}
     >
-      <fieldset disabled={disabled} aria-busy={loading} className="min-w-0 flex-1">
+      <fieldset disabled={disabled} aria-busy={loading || busy} className="min-w-0 flex-1">
         <Search
           inputRef={input}
           value={value}
-          label={t('gui.settings.search_games')}
+          label={label}
           onChange={(query) => {
             setActive(null);
             setOpen(true);
@@ -145,6 +155,7 @@ export default function GameSearch({
           }}
           inputProps={{
             role: 'combobox',
+            maxLength,
             autoComplete: 'off',
             'aria-autocomplete': 'list',
             'aria-expanded': visible,
@@ -165,7 +176,7 @@ export default function GameSearch({
                       ? options.length - 1
                       : Math.max(0, activeIndex - 1);
                 const game = options[index];
-                if (game) setActive({ query: value, name: game.name });
+                if (game) setActive({ query: value, id: game.id });
               } else if (event.key === 'Enter') {
                 event.preventDefault();
                 if (visible && options[activeIndex]) select(options[activeIndex]);
@@ -176,12 +187,14 @@ export default function GameSearch({
         />
       </fieldset>
       <IconButton
-        path={mdiPlus}
-        label={t('gui.settings.add_game')}
+        path={actionIcon}
+        label={actionLabel}
+        type={submit ? 'submit' : 'button'}
+        aria-busy={loading || busy}
         disabled={disabled || !value.trim() || loading}
         onClick={() => {
           setOpen(true);
-          onResolve();
+          if (!submit) onResolve();
           input.current?.focus({ preventScroll: true });
         }}
       />
@@ -190,7 +203,7 @@ export default function GameSearch({
         popover={nativePopover ? 'auto' : undefined}
         hidden={!nativePopover && !visible}
         data-fallback-open={!nativePopover && visible ? true : undefined}
-        className="game-search-popover"
+        className="search-popover"
         onClick={() => input.current?.focus({ preventScroll: true })}
         onBeforeToggle={(event) => {
           if (event.newState === 'closed' && visible) {
@@ -204,12 +217,12 @@ export default function GameSearch({
           id={`${id}-options`}
           role="listbox"
           tabIndex={-1}
-          aria-label={t('gui.settings.search_games')}
+          aria-label={label}
           className="scroll-list min-h-0 overflow-y-auto overscroll-contain"
         >
           {options.map((game, index) => (
             <div
-              key={game.name}
+              key={game.id}
               id={`${id}-${index}`}
               role="option"
               aria-selected={activeIndex === index}
@@ -217,8 +230,13 @@ export default function GameSearch({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => select(game)}
             >
-              <Art url={game.image} className="size-8" />
-              <span>{game.name}</span>
+              <Art url={game.image} className={`size-8 ${roundImages ? 'rounded-full' : ''}`} />
+              <span className="min-w-0">
+                <span className="block truncate">{game.name}</span>
+                {game.description && (
+                  <span className="muted block truncate">{game.description}</span>
+                )}
+              </span>
             </div>
           ))}
         </div>

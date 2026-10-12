@@ -1,10 +1,14 @@
 import MiningPreferences from './MiningPreferences';
+import SearchPicker from '../../shared/ui/SearchPicker';
+import { useDirectorySearch } from './useDirectorySearch';
+import type { ChannelSearchResult } from '../../shared/lib/types';
 import { CampaignLink } from '../campaigns/CampaignLink';
 import { Icon } from '@mdi/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   mdiPencil,
+  mdiReload,
   mdiRefreshAuto,
   mdiPlayCircleOutline,
   mdiPlus,
@@ -59,6 +63,26 @@ export default function Mining() {
   const [manualMinutes, setManualMinutes] = useState('');
   const [enterChannel, setEnterChannel] = useState(false);
   const action = useAction();
+  const searchTerm = channelInput
+    .trim()
+    .replace(/^https?:\/\/(?:www\.|m\.)?twitch\.tv\/([a-z0-9_]{1,25})\/?$/i, '$1')
+    .replace(/^@/, '');
+  const directory = useDirectorySearch<ChannelSearchResult>(
+    '/api/channels/search',
+    searchTerm.length <= 100 ? searchTerm : '',
+    connected && enterChannel && !edit,
+    data?.login.user_id,
+  );
+  const manualForm = useRef<HTMLFormElement>(null);
+  function mineChannel(channel: string) {
+    if (!manualForm.current?.reportValidity()) return;
+    void action.run(() =>
+      request('/api/channels/select', {
+        channel,
+        duration_minutes: manualMinutes ? Number(manualMinutes) : null,
+      }),
+    );
+  }
   if (!data) return <Empty title={t('loading')} />;
   if (edit) return <MiningPreferences />;
   const progress = data.current_drop;
@@ -68,6 +92,7 @@ export default function Mining() {
   const campaign = data.campaigns.find((item) => item.id === progress?.campaign_id);
   const reward = campaign?.drops.find((drop) => drop.id === progress?.drop_id);
   const watching = data.channels.find((channel) => channel.watching);
+  const manualChannel = data.channels.find((channel) => channel.id === data.manual_mode.channel_id);
   const channels = data.channels
     .filter((channel) =>
       `${channel.name} ${channel.game ?? ''}`
@@ -141,7 +166,10 @@ export default function Mining() {
                   {progress.game_name} / {progress.campaign_name}
                 </p>
                 {watching && !paused && (
-                  <p className="muted mt-1">{t('watching', { channel: watching.name })}</p>
+                  <p className="muted mt-2 flex items-center gap-2">
+                    <Art url={watching.avatar_url} className="size-6 rounded-full" />
+                    {t('watching', { channel: watching.name })}
+                  </p>
                 )}
               </div>
             </div>
@@ -180,13 +208,16 @@ export default function Mining() {
         ) : paused ? (
           <Empty className="py-5" title={t('paused_help')} />
         ) : data.manual_mode.active ? (
-          <p className="font-medium">
-            {watching
-              ? t('watching', { channel: watching.name })
-              : t('gui.channels.waiting_for_live', {
-                  channel: data.manual_mode.channel_name ?? '',
-                })}
-          </p>
+          <div className="flex items-center gap-3">
+            <Art url={(watching ?? manualChannel)?.avatar_url} className="size-12 rounded-full" />
+            <p className="font-medium">
+              {watching
+                ? t('watching', { channel: watching.name })
+                : t('gui.channels.waiting_for_live', {
+                    channel: data.manual_mode.channel_name ?? '',
+                  })}
+            </p>
+          </div>
         ) : (
           <Empty
             className="py-5"
@@ -287,40 +318,64 @@ export default function Mining() {
               <div className="mx-4 space-y-3 border-b border-divider py-4">
                 {enterChannel && (
                   <form
+                    ref={manualForm}
                     className="space-y-2"
                     onSubmit={(event) => {
                       event.preventDefault();
-                      void action.run(() =>
-                        request('/api/channels/select', {
-                          channel: channelInput,
-                          duration_minutes: manualMinutes ? Number(manualMinutes) : null,
-                        }),
-                      );
+                      mineChannel(channelInput);
                     }}
                   >
-                    <div className="flex gap-2">
-                      <Input
-                        id="manual-channel"
-                        aria-label={t('gui.channels.channel_input')}
-                        placeholder={t('gui.channels.channel_input')}
-                        value={channelInput}
-                        maxLength={256}
-                        onChange={(event) => setChannelInput(event.target.value)}
-                      />
-                      <IconButton
-                        path={mdiPlayCircleOutline}
-                        label={t('mine')}
-                        type="submit"
-                        aria-busy={action.busy || !!data.manual_mode.pending_channel}
-                        disabled={
-                          !connected ||
-                          !data.login.user_id ||
-                          !channelInput.trim() ||
-                          action.busy ||
-                          !!data.manual_mode.pending_channel
-                        }
-                      />
-                    </div>
+                    <SearchPicker
+                      label={t('gui.channels.channel_input')}
+                      actionLabel={t('mine')}
+                      actionIcon={mdiPlayCircleOutline}
+                      submit
+                      busy={action.busy || !!data.manual_mode.pending_channel}
+                      roundImages
+                      maxLength={256}
+                      value={channelInput}
+                      onChange={setChannelInput}
+                      options={directory.items.map((channel) => ({
+                        id: channel.login,
+                        name: channel.name,
+                        image: channel.avatar_url,
+                        description: `@${channel.login} · ${t(channel.online ? 'gui.channels.live' : 'gui.channels.offline')}${channel.online && channel.game ? ` · ${channel.game}` : ''}`,
+                      }))}
+                      onSelect={(channel) => mineChannel(channel.id)}
+                      onResolve={() => mineChannel(channelInput)}
+                      disabled={
+                        !connected ||
+                        !data.login.user_id ||
+                        action.busy ||
+                        !!data.manual_mode.pending_channel
+                      }
+                      loading={directory.loading}
+                      ready={directory.complete || directory.loading}
+                    >
+                      {directory.loading && (
+                        <p role="status" className="muted px-3 py-2">
+                          {t('loading')}
+                        </p>
+                      )}
+                      {directory.complete && !directory.error && !directory.items.length && (
+                        <p role="status" className="muted px-3 py-2">
+                          {t('gui.channels.search_empty')}
+                        </p>
+                      )}
+                      {directory.error && (
+                        <div
+                          role="status"
+                          className="flex items-center gap-2 px-3 py-2 text-[13px] text-muted"
+                        >
+                          <span>{t('gui.channels.search_failed')}</span>
+                          <IconButton
+                            path={mdiReload}
+                            label={t('retry')}
+                            onClick={directory.retry}
+                          />
+                        </div>
+                      )}
+                    </SearchPicker>
                     <Input
                       type="number"
                       min={1}
@@ -338,7 +393,10 @@ export default function Mining() {
             )}
             {channels.slice(channelPage * 25, (channelPage + 1) * 25).map((channel) => (
               <div className="row flex-wrap sm:flex-nowrap" key={channel.id}>
-                <Art url={channel.game_icon} />
+                <Art
+                  url={channel.avatar_url ?? channel.game_icon}
+                  className={channel.avatar_url ? 'rounded-full' : ''}
+                />
                 <div className="min-w-0 flex-1">
                   <a
                     className="font-medium hover:underline"
@@ -349,8 +407,14 @@ export default function Mining() {
                     {channel.name}
                   </a>
                   <p className="muted truncate">
-                    {channel.game ?? t('unknown_game')} · {channel.viewers?.toLocaleString() ?? '—'}{' '}
-                    {t('gui.channels.viewers')}
+                    {channel.online ? (
+                      <>
+                        {channel.game ?? t('unknown_game')} ·{' '}
+                        {channel.viewers?.toLocaleString() ?? '—'} {t('gui.channels.viewers')}
+                      </>
+                    ) : (
+                      t('gui.channels.offline')
+                    )}
                   </p>
                 </div>
                 {channel.watching ? (
@@ -359,7 +423,7 @@ export default function Mining() {
                   <IconButton
                     path={mdiPlayCircleOutline}
                     label={t('watch_channel', { channel: channel.name })}
-                    disabled={!connected || !channel.online || action.busy}
+                    disabled={!connected || !data.login.user_id || action.busy}
                     onClick={() =>
                       void action.run(() =>
                         request('/api/channels/select', { channel_id: channel.id }),
