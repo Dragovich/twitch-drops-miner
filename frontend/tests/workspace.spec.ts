@@ -534,6 +534,9 @@ test('History details contain only recorded claims even with live campaign metad
   request,
 }) => {
   const saved = await (await request.get('/api/history')).json();
+  await page.route('**/api/campaigns/channels', (route) =>
+    route.fulfill({ status: 503, json: {} }),
+  );
   const artwork = 'https://static-cdn.jtvnw.net/claimed-reward.png';
   await page.route(artwork, (route) =>
     route.fulfill({
@@ -595,7 +598,7 @@ test('History details contain only recorded claims even with live campaign metad
     await expect(detail.getByRole('link')).toHaveCount(0);
     await expect(detail.getByRole('progressbar')).toHaveCount(0);
     await expect(detail).not.toContainText('Account linking');
-    await expect(detail).not.toContainText('Eligible channels');
+    await expect(detail.getByRole('region', { name: 'Participating channels' })).toHaveCount(0);
     await expect(detail).not.toContainText('Saved game order');
     await expect(detail).not.toContainText('Trail companion');
     await expect(detail).not.toContainText('Explorer jacket');
@@ -618,6 +621,9 @@ test('History details contain only recorded claims even with live campaign metad
   await expect(detail.getByRole('heading', { name: 'Live campaign renamed' })).toBeVisible();
   await expect(detail.getByText('Account linking has not been confirmed.')).toBeVisible();
   await expect(detail.getByRole('heading', { name: 'Trail companion' })).toBeVisible();
+  const missingReward = detail
+    .getByRole('status')
+    .filter({ hasText: /^This reward is no longer in the campaign\.$/ });
   for (const drop of ['missing', 'reward-2']) {
     await page.route('**/api/history', (route) => route.fulfill({ status: 500, json: {} }), {
       times: 1,
@@ -627,11 +633,16 @@ test('History details contain only recorded claims even with live campaign metad
     expect((await failed).status()).toBe(500);
     if (drop === 'missing') {
       await expect(detail.getByRole('alert')).toContainText('Could not load history. Try again.');
-      await expect(detail.getByRole('status')).toHaveCount(0);
-      await detail.getByRole('button', { name: 'Try again', exact: true }).click();
-      await expect(detail.getByRole('status')).toHaveText(
-        'This reward is no longer in the campaign.',
+      const channelStatus = detail
+        .getByRole('region', { name: 'Participating channels' })
+        .getByRole('status');
+      await expect(channelStatus).toHaveText(
+        'Channel status could not be checked. Retry or open the channel on Twitch.',
       );
+      await expect(missingReward).toHaveCount(0);
+      await detail.getByRole('button', { name: 'Try again', exact: true }).click();
+      await expect(missingReward).toBeVisible();
+      await expect(channelStatus).toBeVisible();
     } else {
       await expect(page.locator('#drop-reward-2')).toHaveClass(/selected/);
       await expect(detail.getByRole('alert')).toHaveCount(0);
