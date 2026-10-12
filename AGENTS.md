@@ -313,6 +313,14 @@ embed it and run without a build tool/runtime companion. Production builds never
   to 3 for new or missing settings; preserve explicit saved values. Quality 1..6 controls connect
   timeout 5Ã—quality and total 10Ã—quality seconds; the saved refresh interval actually schedules
   inventory work. Slow discovery must not block watch cadence. Duplicate idle prompts collapse.
+  A network generation that fails within a minute of starting is replaced after 5 seconds,
+  doubling per consecutive failure to 320 seconds, so a persistent fault that ends generations
+  cannot repeat authenticated requests every few seconds; a session that cannot be saved
+  backs off the same way. Longer-lived generations, routine validation, proxy or connection
+  quality changes, reauthorization and logout reset the delay. A waiting replacement never
+  blocks commands, and Refresh starts it at once with the delay reset; the session-save delay
+  ends only by elapsing, logout or such a connection change. Other login and validation
+  errors keep their bounded request retries and 5-second pause.
   Nonfatal notification dismissal failures remain visible but never extend or clear the shared
   scheduling retry deadline; authentication and cancellation still propagate.
   Interrupted response bodies retry within the existing five-attempt budget only for replayable

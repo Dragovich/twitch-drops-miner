@@ -1,4 +1,4 @@
-use super::session::{authenticate, reset_session};
+use super::session::{Restarts, authenticate, reset_session};
 use super::*;
 
 mod auto_claim;
@@ -3662,6 +3662,7 @@ async fn concurrent_logout_and_shutdown_drain_owned_work_before_removing_only_tw
     let generation = Generation {
         cancel,
         confirmed: Arc::new(Notify::new()),
+        retry: Arc::new(Notify::new()),
         task,
     };
     let (first, first_result) = oneshot::channel();
@@ -5225,4 +5226,264 @@ async fn channel_search_auth_failure_reaches_the_session_owner() {
     assert_eq!(worker, Err(TwitchError::Unauthorized));
     assert_eq!(result.unwrap(), Err(TwitchError::Unauthorized));
     assert!(sender.is_closed());
+}
+
+async fn failed_generations(app: &App) -> u32 {
+    app.snapshot
+        .read()
+        .await
+        .activity
+        .iter()
+        .filter(|event| event.code == "gui.backend.twitch_error")
+        .map(|event| event.count)
+        .sum()
+}
+
+// The owner records a failed generation immediately before delaying its replacement.
+async fn generation_failed(app: &App, times: u32) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while failed_generations(app).await < times {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn unreadable_claim_journal_backs_off_instead_of_revalidating_every_five_seconds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/validate"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(validation()))
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let (app, commands) = App::open(dir.path().to_owned()).unwrap();
+    session().save(dir.path()).unwrap();
+    std::fs::write(dir.path().join("pending_claims.json"), "{").unwrap();
+    let owner = Miner {
+        app: app.clone(),
+        commands,
+        endpoints: Endpoints::mock(&server.uri()),
+    };
+    let worker = tokio::spawn(owner.run());
+    let validated = |request: &wiremock::Request| request.url.path() == "/oauth2/validate";
+    generation_failed(&app, 1).await;
+    // The first retry keeps the existing five-second delay.
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 2).await;
+    // A second consecutive failure must wait longer than the first.
+    skip(Duration::from_secs(6)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        requests_to(&server, validated).await,
+        2,
+        "a persistent storage failure revalidated the Twitch token again after five seconds"
+    );
+    skip(Duration::from_secs(5)).await;
+    generation_failed(&app, 3).await;
+    assert_eq!(requests_to(&server, validated).await, 3);
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("pending_claims.json")).unwrap(),
+        "{"
+    );
+}
+
+#[tokio::test]
+async fn unreadable_history_backs_off_instead_of_refetching_inventory_every_five_seconds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/validate"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(validation()))
+        .mount(&server)
+        .await;
+    let mut claimed = campaign_json("one");
+    claimed["timeBasedDrops"][0]["self"] =
+        json!({"isClaimed":true,"currentMinutesWatched":60,"dropInstanceID":null});
+    gql_mock(&server, move |q| match q["operationName"].as_str().unwrap() {
+        "Inventory" => json!({"data":{"currentUser":{"inventory":{"dropCampaignsInProgress":[claimed.clone()],"gameEventDrops":[]}}}}),
+        _ => json!({"data":null}),
+    })
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("drop_history.json"), "{").unwrap();
+    let (app, commands) = App::open(dir.path().to_owned()).unwrap();
+    session().save(dir.path()).unwrap();
+    let owner = Miner {
+        app: app.clone(),
+        commands,
+        endpoints: Endpoints::mock(&server.uri()),
+    };
+    let worker = tokio::spawn(owner.run());
+    let inventory = |request: &wiremock::Request| {
+        request.url.path() == "/gql"
+            && String::from_utf8_lossy(&request.body).contains(r#""operationName":"Inventory""#)
+    };
+    generation_failed(&app, 1).await;
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 2).await;
+    skip(Duration::from_secs(6)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        requests_to(&server, inventory).await,
+        2,
+        "an unreadable history file refetched the Twitch inventory again after five seconds"
+    );
+    skip(Duration::from_secs(5)).await;
+    generation_failed(&app, 3).await;
+    assert_eq!(requests_to(&server, inventory).await, 3);
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("drop_history.json")).unwrap(),
+        "{"
+    );
+}
+
+async fn failing_owner(
+    server: &MockServer,
+) -> (
+    tempfile::TempDir,
+    Arc<App>,
+    JoinHandle<Result<(), TwitchError>>,
+) {
+    Mock::given(method("GET"))
+        .and(path("/oauth2/validate"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(validation()))
+        .mount(server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let (app, commands) = App::open(dir.path().to_owned()).unwrap();
+    session().save(dir.path()).unwrap();
+    std::fs::write(dir.path().join("pending_claims.json"), "{").unwrap();
+    let owner = Miner {
+        app: app.clone(),
+        commands,
+        endpoints: Endpoints::mock(&server.uri()),
+    };
+    let worker = tokio::spawn(owner.run());
+    (dir, app, worker)
+}
+
+#[tokio::test]
+async fn commands_are_served_while_a_failed_generation_waits_to_be_replaced() {
+    let server = MockServer::start().await;
+    let (dir, app, worker) = failing_owner(&server).await;
+    generation_failed(&app, 1).await;
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 2).await;
+    // The replacement now waits ten seconds; a logout must not wait with it.
+    tokio::time::timeout(Duration::from_secs(2), app.command(Command::Logout))
+        .await
+        .expect("logout waited for the restart delay")
+        .unwrap();
+    assert!(Session::load(dir.path()).unwrap().is_none());
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn refresh_retries_a_waiting_generation_immediately() {
+    let server = MockServer::start().await;
+    let (_dir, app, worker) = failing_owner(&server).await;
+    generation_failed(&app, 1).await;
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 2).await;
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        app.command(Command::Refresh { clear_cache: false }),
+    )
+    .await
+    .expect("refresh waited for the restart delay")
+    .unwrap();
+    // No clock movement: only the refresh can have started the third attempt.
+    tokio::time::timeout(Duration::from_secs(3), generation_failed(&app, 3))
+        .await
+        .expect("refresh did not retry the waiting generation");
+    // An explicit retry also restarts the delay, so the next one is five seconds again.
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 4).await;
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unwritable_session_backs_off_instead_of_revalidating_every_five_seconds() {
+    use std::os::unix::fs::PermissionsExt;
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/validate"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(validation()))
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let (app, commands) = App::open(dir.path().to_owned()).unwrap();
+    session().save(dir.path()).unwrap();
+    let writable = std::fs::metadata(dir.path()).unwrap().permissions();
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::write(dir.path().join("probe"), "").is_ok() {
+        // A privileged test user ignores directory permissions.
+        std::fs::set_permissions(dir.path(), writable).unwrap();
+        return;
+    }
+    let owner = Miner {
+        app: app.clone(),
+        commands,
+        endpoints: Endpoints::mock(&server.uri()),
+    };
+    let worker = tokio::spawn(owner.run());
+    let validated = |request: &wiremock::Request| request.url.path() == "/oauth2/validate";
+    generation_failed(&app, 1).await;
+    skip(Duration::from_secs(6)).await;
+    generation_failed(&app, 2).await;
+    skip(Duration::from_secs(6)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let repeated = requests_to(&server, validated).await;
+    skip(Duration::from_secs(5)).await;
+    generation_failed(&app, 3).await;
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    std::fs::set_permissions(dir.path(), writable).unwrap();
+    assert_eq!(
+        repeated, 2,
+        "a session that cannot be saved revalidated the Twitch token again after five seconds"
+    );
+    assert!(Session::load(dir.path()).unwrap().is_some());
+}
+
+#[test]
+fn restart_delay_grows_for_quick_failures_and_resets_after_a_stable_generation() {
+    let quick = Duration::from_secs(3);
+    let mut restarts = Restarts::default();
+    let delays: Vec<_> = (0..8).map(|_| restarts.delay(quick).as_secs()).collect();
+    assert_eq!(delays, [5, 10, 20, 40, 80, 160, 320, 320]);
+    // Three failed watches end a generation that mined for minutes; keep its prompt renewal.
+    assert_eq!(restarts.delay(Duration::from_secs(60)).as_secs(), 5);
+    assert_eq!(restarts.delay(quick).as_secs(), 10);
+    restarts.reset();
+    assert_eq!(restarts.delay(quick).as_secs(), 5);
 }

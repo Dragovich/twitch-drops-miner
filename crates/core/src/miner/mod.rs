@@ -71,6 +71,7 @@ impl ManualSelection {
 struct Generation {
     cancel: CancellationToken,
     confirmed: Arc<Notify>,
+    retry: Arc<Notify>,
     task: JoinHandle<Result<(), TwitchError>>,
 }
 
