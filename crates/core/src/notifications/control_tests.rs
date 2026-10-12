@@ -244,7 +244,8 @@ async fn commands_save_only_the_requested_setting_and_use_confirmed_progress() {
     });
     let session = session(&app);
     let reply = session.execute(&app, Command::Status).await.unwrap();
-    assert!(reply.contains("12 / 100") && !reply.contains("99 /"));
+    assert!(reply.lines().any(|line| line == "12/100 minutes") && !reply.contains("99/"));
+    assert!(!reply.contains("Drops Miner"));
     assert!(reply.contains("&lt;&amp;reward&gt;") && reply.contains("Manual channel"));
     app.snapshot
         .write()

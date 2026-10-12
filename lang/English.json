@@ -14,7 +14,7 @@
         "help": "/status — current mining and confirmed progress\n/pause — pause watching\n/resume — resume watching\n/mine Game — add a known game to automatic mining\n/help — show commands\n\nSaved priorities and manual selection still apply. Pause does not stop inventory or automatic claims.",
         "watching": "Watching",
         "channel": "Channel: {channel}",
-        "progress": "Confirmed: {current} / {required} minutes",
+        "progress": "{current}/{required} minutes",
         "progress_unknown": "Progress not confirmed yet",
         "manual": "Manual channel selection is active.",
         "login_required": "Connect your Twitch account in Drops Miner first.",

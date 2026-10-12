@@ -132,7 +132,7 @@ fn status(snapshot: &Snapshot) -> String {
     } else {
         message(&format!("gui.redesign.mining_state_{state}"), &[])
     };
-    let mut lines = vec!["<b>Drops Miner</b>".to_owned(), html(&label)];
+    let mut lines = vec![html(&label)];
     if snapshot.login.user_id.is_some() {
         if let Some(channel) = snapshot.channels.iter().find(|c| c.watching) {
             lines.push(text("channel", &[("channel", &html(&channel.name))]));
