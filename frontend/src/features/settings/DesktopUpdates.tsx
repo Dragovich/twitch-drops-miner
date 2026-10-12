@@ -174,26 +174,33 @@ export function DesktopUpdates() {
               t(`gui.desktop.update_${status.phase}`, { version: status.version ?? '' })}
         </p>
       </UpdateCheck>
-      {status?.phase === 'downloading' && (
-        <div className="max-w-sm space-y-2">
-          {downloadTotal !== null && (
-            <ProgressBar
-              current={status.downloaded}
-              total={downloadTotal}
-              label={t('gui.desktop.update_downloading', { version: status.version ?? '' })}
-            />
+      {status?.version && (
+        // Reserve the bar and byte label so download changes do not move the controls below.
+        <div className="min-h-7.5 max-w-sm">
+          {status.phase === 'downloading' && (
+            <>
+              <div className="h-1.5">
+                {downloadTotal !== null && (
+                  <ProgressBar
+                    current={status.downloaded}
+                    total={downloadTotal}
+                    label={t('gui.desktop.update_downloading', { version: status.version })}
+                  />
+                )}
+              </div>
+              <p className="mt-2 text-xs text-muted tabular-nums">
+                {downloadTotal !== null
+                  ? t('gui.desktop.download_progress', {
+                      downloaded: (status.downloaded / 1_000_000).toFixed(1),
+                      total: (downloadTotal / 1_000_000).toFixed(1),
+                      percent: Math.min(100, Math.floor((status.downloaded / downloadTotal) * 100)),
+                    })
+                  : t('gui.desktop.download_received', {
+                      downloaded: (status.downloaded / 1_000_000).toFixed(1),
+                    })}
+              </p>
+            </>
           )}
-          <p className="text-xs text-muted tabular-nums">
-            {downloadTotal !== null
-              ? t('gui.desktop.download_progress', {
-                  downloaded: (status.downloaded / 1_000_000).toFixed(1),
-                  total: (downloadTotal / 1_000_000).toFixed(1),
-                  percent: Math.min(100, Math.floor((status.downloaded / downloadTotal) * 100)),
-                })
-              : t('gui.desktop.download_received', {
-                  downloaded: (status.downloaded / 1_000_000).toFixed(1),
-                })}
-          </p>
         </div>
       )}
       {status?.version && (

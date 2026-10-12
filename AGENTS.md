@@ -117,7 +117,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   the same section; never open a separate update dialog. Keep download/cancel, verified install
   and restart recovery inline, using Tauri's updater. Show its reported download bytes in a
   custom progress bar with percentage and size when the total is known; otherwise show only
-  bytes received. Download completion is not signature verification or permission to install.
+  bytes received. Reserve the progress row while an update version is known so download,
+  cancellation and readiness do not shift the controls below. Download completion is not
+  signature verification or permission to install.
   Checking/current states do not add a sidebar link. Show Cancel only during downloads;
   checks use the busy icon and inline status without an extra action row.
   Navigation never installs automatically.

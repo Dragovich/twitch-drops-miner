@@ -264,6 +264,45 @@ test('long update labels stay beside GitHub or the compact brand without overflo
   expect(await page.evaluate(() => window.updateFixture.calls)).toEqual([]);
 });
 
+for (const width of [1280, 390, 320]) {
+  test(`download progress keeps controls and following content still at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    const updates = page.getByRole('region', { name: 'App updates' });
+    await page.evaluate(() =>
+      window.updateFixture.publish({ phase: 'available', version: '2.2.0' }),
+    );
+    const positions = async () => ({
+      updates: await updates.boundingBox(),
+      actionY: (await updates
+        .getByRole('button', { name: /^(Update|Cancel|Install and restart)$/ })
+        .boundingBox())!.y,
+      notesY: (await updates.getByRole('link', { name: 'Release notes' }).boundingBox())!.y,
+      clearY: (await page
+        .getByRole('button', { name: 'Clear All Cache', exact: true })
+        .boundingBox())!.y,
+      sidebar: await page.getByRole('complementary').boundingBox(),
+    });
+    const available = await positions();
+    await updates.getByRole('button', { name: 'Update', exact: true }).click();
+    await expect(updates.getByText('0.0 MB downloaded', { exact: true })).toBeVisible();
+    expect(await positions()).toEqual(available);
+    await page.evaluate(() =>
+      window.updateFixture.publish({ downloaded: 24_000_000, total: 50_000_000 }),
+    );
+    await expect(updates.getByRole('progressbar')).toBeVisible();
+    expect(await positions()).toEqual(available);
+    await updates.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(updates.getByRole('progressbar')).toHaveCount(0);
+    expect(await positions()).toEqual(available);
+    await updates.getByRole('button', { name: 'Update', exact: true }).click();
+    await page.evaluate(() => window.updateFixture.publish({ phase: 'ready' }));
+    await expect(updates.getByRole('button', { name: 'Install and restart' })).toBeVisible();
+    expect(await positions()).toEqual(available);
+  });
+}
+
 test('tray checks and update failures retain inline recovery', async ({ page }) => {
   const updates = page.getByRole('region', { name: 'App updates' });
   const check = updates.getByRole('button', { name: 'Check for updates', exact: true });
