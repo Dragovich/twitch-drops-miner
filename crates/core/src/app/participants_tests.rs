@@ -170,6 +170,44 @@ async fn queries_reject_non_acl_targets_and_stale_account_or_campaign_replies() 
 }
 
 #[tokio::test]
+async fn partial_graphql_errors_never_report_offline_or_confirm_drops_metadata() {
+    let server = MockServer::start().await;
+    gql_mock(&server, |q| {
+        if q["variables"]["channel"] == "streamer1" {
+            return json!({"data":{"user":{"id":"1","stream":null}},
+                "errors":[{"message":"server error","path":["user","stream"]}]});
+        }
+        if q["variables"]["channel"] == "streamer2" {
+            return json!({"data":{"user":{"id":"2","stream":{"id":"broadcast"},
+                "broadcastSettings":{"game":{"id":"1","name":"Rust"}}}}});
+        }
+        if q["variables"]["channelID"] == "2" {
+            return json!({"data":{"channel":{"id":"2","viewerDropCampaigns":[{"id":"campaign"}]}},
+                "errors":[{"message":"server error","path":["channel","id"]}]});
+        }
+        response(q)
+    })
+    .await;
+    let (_dir, app) = setup().await;
+    let client = TwitchClient::new(Arc::new(http(&server)), &session());
+    let cancel = client.http.cancel.clone();
+    let (sender, receiver) = mpsc::channel(4);
+    *app.participant_queries.write().await = Some(sender);
+    let worker = tokio::spawn(run(client, receiver));
+    let page = app.campaign_channels(query(0)).await.unwrap();
+    assert_eq!(
+        (page.channels[0].online, page.channels[0].eligible),
+        (None, None)
+    );
+    assert_eq!(
+        (page.channels[1].online, page.channels[1].eligible),
+        (Some(true), None)
+    );
+    cancel.cancel();
+    assert_eq!(worker.await.unwrap(), Err(TwitchError::Cancelled));
+}
+
+#[tokio::test]
 async fn abandoned_reads_cancel_and_authentication_failure_reaches_the_session_owner() {
     let server = MockServer::start().await;
     let client = TwitchClient::new(Arc::new(http(&server)), &session());

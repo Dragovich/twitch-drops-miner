@@ -35,7 +35,13 @@ impl ChannelStatus {
             drops_known: false,
         };
         let user = &stream["data"]["user"];
-        if number(&user["id"]) != Some(identity.id) {
+        // A failed GraphQL resolver can null stream without establishing that it is offline.
+        let complete = |response: &Value| {
+            response
+                .get("errors")
+                .is_none_or(|errors| errors.as_array().is_some_and(Vec::is_empty))
+        };
+        if !complete(stream) || number(&user["id"]) != Some(identity.id) {
             return status;
         }
         match user.get("stream") {
@@ -46,7 +52,8 @@ impl ChannelStatus {
             }
             _ => return status,
         }
-        if let Some(campaigns) = drops["data"]["channel"]["viewerDropCampaigns"].as_array()
+        if complete(drops)
+            && let Some(campaigns) = drops["data"]["channel"]["viewerDropCampaigns"].as_array()
             && campaigns
                 .iter()
                 .all(|c| c["id"].as_str().is_some_and(|id| !id.is_empty()))
