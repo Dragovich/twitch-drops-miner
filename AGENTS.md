@@ -293,8 +293,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   fabricate missing campaign metadata.
 - Every session/job/socket task is owned and drained. Logout coalesces and removes only Twitch
   credentials after drainage; concurrent shutdown cannot interrupt removal in either queue order.
-  Hourly validation/network reconfiguration preserves manual selection/deadlines and queues
-  new channel choices until fresh channel eligibility is available. Cache clear
+  Validate Twitch tokens at startup and hourly with owned, cancellable work independent of
+  mining and inventory scheduling. Valid checks keep the current network generation, inventory
+  deadline, progress, manual selection/deadlines and sockets. Failed checks retain credentials
+  and retry after one minute using bounded HTTP requests; rejected tokens drain the generation
+  before the existing authentication path renews them. Account/client mismatches still reject
+  the session. Network reconfiguration preserves manual selection/deadlines and queues new
+  channel choices until fresh channel eligibility is available. Cache clear
   preserves settings, credentials and completed campaigns, and clears local claim history with
   durable cleared-ID tombstones before refreshing; failure to persist must fail the clear.
 - Requests use bounded concurrency/rate, retries and cancellation. Connection Quality defaults
@@ -326,7 +331,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   an owned runtime worker, separate from Twitch work. Publish after successful durable claims;
   never notify on estimates, imported history or cache clears. Browser/native notification
   payloads stay unchanged. A bounded queue and account/drop deduplication make delivery best
-  effort; no persistent outbox or restart replay. Hourly Twitch renewal does not restart it.
+  effort; no persistent outbox or restart replay. Twitch validation/renewal does not restart it.
 - `telegram.json` stores enabled/remote_control/token/numeric chat ID separately from public settings. Use
   atomic private writes and revision conflicts; unreadable files remain untouched with Telegram
   disabled. Tokens are write-only, omitted from snapshots/IPC reads, logs and browser drafts.
@@ -449,8 +454,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   Lighten dark chat colors only enough for readable contrast, preserving their hue.
   Profile metadata uses bounded, cancellable GraphQL reads owned by the authenticated network
   generation, concurrently with mining, using the existing login with no new scopes. Refresh
-  once per generation (normally hourly), preserve same-account metadata during renewal, and
-  clear it on logout/account changes. Never persist it or accept late data for another account.
+  at generation startup and after successful hourly validation. Preserve same-account metadata
+  during renewal and clear it on logout/account changes. Never persist it or accept late data
+  for another account.
   Query the full selectable global badge collection separately; permission/schema/network
   failures leave it explicitly unavailable while retaining equipped badges. Do not include
   channel subscription badges or infer badge ownership from the global artwork catalog.

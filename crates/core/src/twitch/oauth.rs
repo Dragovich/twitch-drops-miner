@@ -88,7 +88,8 @@ impl Session {
             refresh_token: token.refresh_token.as_ref().map(|v| v.secret().to_owned()),
         })
     }
-    pub async fn restore(&self, http: &TwitchHttp) -> Result<Self, TwitchError> {
+    // None requests renewal; identity mismatches remain fatal.
+    pub(crate) async fn validate(&self, http: &TwitchHttp) -> Result<Option<Self>, TwitchError> {
         let access = AccessToken::new(self.access_token.clone());
         let validated = match access.validate_token(http).await {
             Ok(validated) => UserToken::new(
@@ -108,43 +109,50 @@ impl Session {
             Err(
                 ValidationError::NotAuthorized
                 | ValidationError::Request(TwitchError::Unauthorized),
-            ) => {
-                let refresh = self
-                    .refresh_token
-                    .clone()
-                    .ok_or(TwitchError::Unauthorized)?;
-                UserToken::from_refresh_token(
-                    http,
-                    RefreshToken::new(refresh),
-                    ClientId::new(CLIENT_ID.into()),
-                    None,
-                )
-                .await
-                .map_err(|error| match error {
-                    RetrieveTokenError::ValidationError { error, .. } => validation_error(error),
-                    RetrieveTokenError::RefreshTokenError {
-                        error: RefreshTokenError::RequestError(error),
-                        ..
-                    } => error,
-                    RetrieveTokenError::RefreshTokenError {
-                        error:
-                            RefreshTokenError::RequestParseError(
-                                twitch_oauth2::RequestParseError::TwitchError(error),
-                            ),
-                        ..
-                    } if matches!(error.status.as_u16(), 400 | 401 | 403) => {
-                        TwitchError::Unauthorized
-                    }
-                    _ => diagnostics::invalid(
-                        "OAuthRefresh",
-                        "token refresh response rejected by OAuth library",
-                        None,
-                    ),
-                })?
-            }
+            ) => return Ok(None),
             Err(error) => return Err(validation_error(error)),
         };
-        let restored = Self::from_token(&validated, http)?;
+        self.same_account(&validated, http).map(Some)
+    }
+    pub async fn restore(&self, http: &TwitchHttp) -> Result<Self, TwitchError> {
+        if let Some(validated) = self.validate(http).await? {
+            return Ok(validated);
+        }
+        let refresh = self
+            .refresh_token
+            .clone()
+            .ok_or(TwitchError::Unauthorized)?;
+        let refreshed =
+            UserToken::from_refresh_token(
+                http,
+                RefreshToken::new(refresh),
+                ClientId::new(CLIENT_ID.into()),
+                None,
+            )
+            .await
+            .map_err(|error| match error {
+                RetrieveTokenError::ValidationError { error, .. } => validation_error(error),
+                RetrieveTokenError::RefreshTokenError {
+                    error: RefreshTokenError::RequestError(error),
+                    ..
+                } => error,
+                RetrieveTokenError::RefreshTokenError {
+                    error:
+                        RefreshTokenError::RequestParseError(
+                            twitch_oauth2::RequestParseError::TwitchError(error),
+                        ),
+                    ..
+                } if matches!(error.status.as_u16(), 400 | 401 | 403) => TwitchError::Unauthorized,
+                _ => diagnostics::invalid(
+                    "OAuthRefresh",
+                    "token refresh response rejected by OAuth library",
+                    None,
+                ),
+            })?;
+        self.same_account(&refreshed, http)
+    }
+    fn same_account(&self, token: &UserToken, http: &TwitchHttp) -> Result<Self, TwitchError> {
+        let restored = Self::from_token(token, http)?;
         if restored.user_id != self.user_id {
             return Err(TwitchError::Unauthorized);
         }
