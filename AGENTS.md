@@ -505,6 +505,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 88px
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
   Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
+  In Watching text, only the streamer name links to their Twitch channel using the login.
   Keep the 6px progress track and 8px count gap. Group the manual return action and timer
   in one wrapping row, preserving phone hit targets. Its empty state adds 20px vertical padding.
   Known rewards without confirmed progress show an empty progress bar and `0 / required minutes`

@@ -93,6 +93,19 @@ export default function Mining() {
   const campaign = data.campaigns.find((item) => item.id === progress?.campaign_id);
   const reward = campaign?.drops.find((drop) => drop.id === progress?.drop_id);
   const watching = data.channels.find((channel) => channel.watching);
+  const watchingLabel = watching && (
+    <span>
+      {t('watching_now')}{' '}
+      <a
+        className="hover:underline"
+        href={`https://www.twitch.tv/${encodeURIComponent(watching.login || watching.name)}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {watching.name}
+      </a>
+    </span>
+  );
   const manualChannel = data.channels.find((channel) => channel.id === data.manual_mode.channel_id);
   const channels = data.channels
     .filter((channel) =>
@@ -170,7 +183,7 @@ export default function Mining() {
                 {watching && !paused && (
                   <p className="muted mt-2 flex items-center gap-2">
                     <Art url={watching.avatar_url} className="size-8! rounded-full" />
-                    {t('watching', { channel: watching.name })}
+                    {watchingLabel}
                   </p>
                 )}
               </div>
@@ -214,7 +227,7 @@ export default function Mining() {
             <Art url={(watching ?? manualChannel)?.avatar_url} className="size-8! rounded-full" />
             <p className="font-medium">
               {watching
-                ? t('watching', { channel: watching.name })
+                ? watchingLabel
                 : t('gui.channels.waiting_for_live', {
                     channel: data.manual_mode.channel_name ?? '',
                   })}

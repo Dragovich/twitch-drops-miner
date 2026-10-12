@@ -681,6 +681,10 @@ for (const width of [1440, 320]) {
     const identity = reward.locator('../..');
     const artwork = identity.locator(':scope > span');
     const text = reward.locator('..');
+    const watching = snapshot.channels.find((channel) => channel.watching)!;
+    const streamerLink = card.getByRole('link', { name: watching.name, exact: true });
+    await expect(streamerLink).toHaveText(watching.name);
+    await expect(streamerLink).toHaveAttribute('href', 'https://www.twitch.tv/northwind');
     for (const title of ['Explorer jacket', 'Explorer jacket and companion reward bundle']) {
       expect(
         (
@@ -694,7 +698,7 @@ for (const width of [1440, 320]) {
       const artBox = (await artwork.boundingBox())!;
       const textBox = (await text.boundingBox())!;
       expect([artBox.width, artBox.height]).toEqual([88, 88]);
-      const avatarBox = (await text.locator('p > span').boundingBox())!;
+      const avatarBox = (await text.locator('p > span').first().boundingBox())!;
       expect([avatarBox.width, avatarBox.height]).toEqual([32, 32]);
       expect(artBox.y + artBox.height / 2).toBeCloseTo(textBox.y + textBox.height / 2, 0);
       expect(artBox.x + artBox.width).toBeLessThan(textBox.x);

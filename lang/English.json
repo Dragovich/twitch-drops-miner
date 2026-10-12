@@ -171,7 +171,6 @@
             "catalog_updated": "Campaign catalog: SunkwiBOT. Updated {time}.",
             "automatic": "Automatic selection",
             "manual": "Manual selection",
-            "watching": "Watching {channel}",
             "watching_now": "Watching",
             "watch": "Watch",
             "watch_channel": "Watch {channel}",

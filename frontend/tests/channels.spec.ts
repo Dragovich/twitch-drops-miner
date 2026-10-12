@@ -233,12 +233,18 @@ for (const viewport of [
     });
     await expect(mining).toContainText('Watching Sleepy Streamer');
     await expect(mining.locator('img')).toHaveAttribute('src', avatar);
+    const streamerLink = mining.getByRole('link', { name: offline.name, exact: true });
+    await expect(streamerLink).toHaveText(offline.name);
+    await expect(streamerLink).toHaveAttribute('href', 'https://www.twitch.tv/sleepy_streamer');
+    await expect(streamerLink).toHaveAttribute('target', '_blank');
+    await expect(streamerLink).toHaveAttribute('rel', 'noreferrer');
     await request.post('/__test/event', {
       headers,
       data: { event: 'drop_progress', data: fixture.current_drop },
     });
     await expect(mining.getByRole('progressbar')).toBeVisible();
     await expect(mining.locator(`img[src="${avatar}"]`)).toBeVisible();
+    await expect(streamerLink).toHaveAttribute('href', 'https://www.twitch.tv/sleepy_streamer');
     await page.getByRole('button', { name: 'Return to Auto Mode' }).click();
     await expect(page.getByRole('img', { name: 'Automatic selection', exact: true })).toBeVisible();
   });
