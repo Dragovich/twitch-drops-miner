@@ -1,5 +1,16 @@
 # Changelog
 
+## [v2.2.0](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.2.0) — 2026-10-12
+
+- add optional private-chat Telegram controls for status, pause, resume and game selection on desktop and server ([#109](https://github.com/ohne-b/twitch-drops-miner/pull/109))
+- allow automatic drop claiming to be disabled while mining continues ([#107](https://github.com/ohne-b/twitch-drops-miner/pull/107))
+- expand channel discovery and pagination, search Twitch for manual selections, show streamer avatars and wait for offline selections to go live ([#110](https://github.com/ohne-b/twitch-drops-miner/pull/110))
+- improve Now mining artwork, link the watched streamer and shorten confirmed-progress timestamps ([#110](https://github.com/ohne-b/twitch-drops-miner/pull/110))
+- validate Twitch sessions hourly without resetting inventory refreshes or manual selections ([#106](https://github.com/ohne-b/twitch-drops-miner/pull/106))
+- switch away from repeatedly failing streams when another eligible stream is available ([#94](https://github.com/ohne-b/twitch-drops-miner/pull/94) by [@ElmoBlatch](https://github.com/ElmoBlatch))
+- slow repeated startup failures while keeping commands responsive ([#93](https://github.com/ohne-b/twitch-drops-miner/pull/93) by [@ElmoBlatch](https://github.com/ElmoBlatch))
+- add browser security headers with verified WebSocket and artwork compatibility ([#95](https://github.com/ohne-b/twitch-drops-miner/pull/95) by [@ElmoBlatch](https://github.com/ElmoBlatch))
+
 ## [v2.1.0](https://github.com/ohne-b/twitch-drops-miner/releases/tag/v2.1.0) — 2026-10-11
 
 - add optional Telegram notifications for claimed rewards on desktop and server, with private bot settings and a test button ([#100](https://github.com/ohne-b/twitch-drops-miner/pull/100))
