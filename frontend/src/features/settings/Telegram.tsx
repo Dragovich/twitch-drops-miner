@@ -17,6 +17,7 @@ import {
 
 interface Configuration {
   enabled: boolean;
+  remote_control: boolean;
   include_image: boolean;
   token_configured: boolean;
   chat_id: string;
@@ -35,6 +36,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
   const [saved, setSaved] = useState<Configuration>();
   const [identity, setIdentity] = useState<BotIdentity>();
   const [enabled, setEnabled] = useState(false);
+  const [remoteControl, setRemoteControl] = useState(false);
   const [includeImage, setIncludeImage] = useState(false);
   const [chat, setChat] = useState('');
   const [token, setToken] = useState('');
@@ -50,6 +52,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
         if (controller.signal.aborted) return;
         setSaved(value);
         setEnabled(value.enabled);
+        setRemoteControl(value.remote_control);
         setIncludeImage(value.include_image);
         setChat(value.chat_id);
       })
@@ -72,6 +75,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
   const dirty =
     !!saved &&
     (enabled !== saved.enabled ||
+      remoteControl !== saved.remote_control ||
       includeImage !== saved.include_image ||
       chat !== saved.chat_id ||
       token !== '');
@@ -81,6 +85,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
       const value = await request<Configuration>('/api/telegram', {
         revision: saved.revision,
         enabled,
+        remote_control: remoteControl,
         include_image: includeImage,
         chat_id: chat,
         token,
@@ -92,6 +97,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
       });
       setSaved(value);
       setEnabled(value.enabled);
+      setRemoteControl(value.remote_control);
       setIncludeImage(value.include_image);
       setChat(value.chat_id);
       setToken('');
@@ -150,6 +156,17 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 setIncludeImage(value);
               }}
             />
+            <div className="flex items-center gap-1">
+              <Check
+                label={t('telegram_remote_control')}
+                checked={remoteControl}
+                onChange={(value) => {
+                  action.clear();
+                  setRemoteControl(value);
+                }}
+              />
+              <HelpButton label={t('telegram_remote_control')} text={t('telegram_control_help')} />
+            </div>
             <Field label={t('telegram_bot_token')}>
               <Input
                 type="password"
@@ -181,7 +198,7 @@ export default function Telegram({ connected }: { connected: boolean }) {
                 {t('telegram_save')}
               </Button>
               <Button
-                disabled={dirty || !saved.enabled}
+                disabled={dirty || !(saved.enabled || saved.remote_control)}
                 onClick={() =>
                   void action.run(() => request('/api/telegram/test', {}), t('telegram_test_sent'))
                 }

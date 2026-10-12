@@ -10,6 +10,26 @@
         "no_selection": "No games selected for mining. Choose Mine in Campaigns to start.",
         "message": "{message}"
     },
+    "telegram": {
+        "help": "/status — current mining and confirmed progress\n/pause — pause watching\n/resume — resume watching\n/mine Game — add a known game to automatic mining\n/help — show commands\n\nSaved priorities and manual selection still apply. Pause does not stop inventory or automatic claims.",
+        "watching": "Watching",
+        "channel": "Channel: {channel}",
+        "progress": "{current}/{required} minutes",
+        "progress_unknown": "Progress not confirmed yet",
+        "manual": "Manual channel selection is active.",
+        "login_required": "Connect your Twitch account in Drops Miner first.",
+        "paused": "Mining pause saved. Inventory and automatic claims continue.",
+        "resumed": "Mining resume saved.",
+        "selected": "Selected {game} for automatic mining. Saved priorities, pause and manual channel selection still apply.",
+        "unknown_game": "Game not found. Use its exact name from current campaigns or your saved games.",
+        "conflict": "Settings changed while handling the command. Check /status and send it again if needed.",
+        "failed": "The command could not be confirmed. Check /status before trying again.",
+        "menu_status": "Show mining status and confirmed progress",
+        "menu_pause": "Pause watching; automatic claims continue",
+        "menu_resume": "Resume watching",
+        "menu_mine": "Add a game to automatic mining: /mine Rust",
+        "menu_help": "Show commands"
+    },
     "login": {
         "status": {
             "logged_in": "Logged in",
@@ -48,6 +68,7 @@
             "invalid_manual_duration": "Enter a whole number of minutes from 1 to 1440, or leave the timer empty.",
             "twitch_login_required": "Connect your Twitch account before selecting a channel.",
             "telegram_invalid": "Enter a valid bot token and numeric chat ID.",
+            "telegram_private_chat": "Remote control requires your positive private chat ID. Group chats can receive alerts only.",
             "telegram_conflict": "Settings changed on another device. Reopen Notifications to load the saved settings.",
             "telegram_storage": "Telegram settings could not be read or saved. Check telegram.json in the data folder; the original file was preserved.",
             "telegram_disabled": "Enable and save Telegram before sending a test.",
@@ -369,6 +390,8 @@
             "notifications": "Notifications",
             "telegram_include_image": "Include image",
             "telegram_enabled": "Notify me when a reward is claimed",
+            "telegram_remote_control": "Allow remote control",
+            "telegram_control_help": "Use /status, /pause, /resume and /mine Game in your private bot chat. Requires a dedicated bot and a running miner. Old commands are discarded when controls start.",
             "telegram_bot_token": "Bot token",
             "telegram_chat_id": "Chat ID",
             "telegram_token_saved": "Token saved",
@@ -388,7 +411,9 @@
             "twitch_error": "Twitch operation failed: {error}. Retrying...",
             "worker_failed": "The mining task stopped unexpectedly. Shutting down safely.",
             "drop_claimed": "Drop claimed",
-            "telegram_delivery_failed": "Telegram notification could not be sent. Mining continues."
+            "telegram_delivery_failed": "Telegram message could not be sent. Mining continues.",
+            "telegram_controls_failed": "Telegram commands are unavailable. Check the token and connection. Mining continues; polling will retry.",
+            "telegram_controls_conflict": "Telegram commands conflict with another bot receiver or webhook. Use a dedicated bot for this miner. Mining continues."
         },
         "desktop": {
             "tab": "Desktop",

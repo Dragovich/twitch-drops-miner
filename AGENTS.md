@@ -327,7 +327,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   never notify on estimates, imported history or cache clears. Browser/native notification
   payloads stay unchanged. A bounded queue and account/drop deduplication make delivery best
   effort; no persistent outbox or restart replay. Hourly Twitch renewal does not restart it.
-- `telegram.json` stores enabled/token/numeric chat ID separately from public settings. Use
+- `telegram.json` stores enabled/remote_control/token/numeric chat ID separately from public settings. Use
   atomic private writes and revision conflicts; unreadable files remain untouched with Telegram
   disabled. Tokens are write-only, omitted from snapshots/IPC reads, logs and browser drafts.
   Blank input retains the saved token; explicit Remove configuration clears it. Accepted saves
@@ -344,8 +344,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   HTTPS Twitch artwork; missing/unsafe artwork stays text-only. Telegram controls rendering.
   Never upload/download image bodies or add another message; tests remain text-only.
 - Settings > Notifications shares the same save/remove/test application methods through guarded
-  server HTTP and scoped desktop IPC. Keep setup help compact; no bot commands, polling,
-  additional providers or ready/progress alerts. Tests/fixtures never contact real bots.
+  server HTTP and scoped desktop IPC. Keep setup help compact; no additional providers or
+  automatic ready/progress alerts. Tests/fixtures never contact real bots.
   Form errors stay inline without a reload-settings action. Revision conflicts retain edits
   and explain that reopening Notifications loads the current saved settings.
 - Show the saved bot name as a chat link beside Telegram's heading. Resolve it with a
@@ -355,6 +355,20 @@ embed it and run without a build tool/runtime companion. Production builds never
   from saves/delivery. Fixtures disable lookup traffic. Save uses the MDI save icon and its
   disabled state confirms success; omit the saved banner. Remove configuration is an
   accessible, icon-only delete action; retain inline errors and test-send feedback.
+- Remote control defaults off independently of claim alerts. The same owned runtime joins
+  a separate bounded long-poll loop using the isolated Telegram client. Only fresh, original
+  private messages from the configured positive chat ID and identical non-bot sender may
+  run `/status`, `/pause`, `/resume`, `/mine Game` or `/help` (`/start` also shows help).
+  Match known game names with shared casefolding; append without replacing games or changing
+  priorities, pause or manual mode. Reuse owned revision-checked settings saves; replies
+  report saved intent and confirmed progress only. Ignore forwarded, edited and group messages.
+  Discard startup/reconfiguration backlog and messages older than two minutes. Advance the
+  in-memory offset before execution; failed replies never replay commands. Config changes,
+  logout and shutdown cancel/fence pending work; accepted writes still drain. Register the
+  command menu for the owner chat only. Do not alter webhooks. Pace/retry failed polls with
+  bounded backoff and report receiver conflicts separately; keep failures out of mining.
+  Replies share paced delivery with claims/tests, work with claim alerts disabled, and never
+  contain tokens, raw requests or response bodies. Offline fixtures disable all bot traffic.
 
 ## Authentication and storage
 
