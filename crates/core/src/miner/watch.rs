@@ -319,7 +319,7 @@ impl Mining {
             self.manual = None;
             self.publish = true;
         }
-        let next = select_channel(
+        let mut next = select_channel(
             &self.channels,
             &self.campaigns,
             settings,
@@ -327,6 +327,18 @@ impl Mining {
             self.watching,
             self.manual.map(|manual| manual.channel),
         );
+        self.avoided.retain(|_, until| Instant::now() < *until);
+        if self.manual.is_none() && next.is_some_and(|id| self.avoided.contains_key(&id)) {
+            // Keep a failing stream only when no other eligible stream exists.
+            let others: Vec<_> = self
+                .channels
+                .iter()
+                .filter(|c| !self.avoided.contains_key(&c.identity.id))
+                .cloned()
+                .collect();
+            let current = self.watching.filter(|id| !self.avoided.contains_key(id));
+            next = select_channel(&others, &self.campaigns, settings, now, current, None).or(next);
+        }
         if next != self.watching {
             self.cancel_watch();
             self.playback = None;

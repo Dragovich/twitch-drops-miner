@@ -245,7 +245,14 @@ embed it and run without a build tool/runtime companion. Production builds never
   estimates, and recover at 15 unconfirmed estimates. Only currently eligible drop progress
   suppresses fallback. Failed/unacknowledged beacons invalidate the owned channel's cached
   address. Three consecutive current-stream watch failures renew the network generation;
-  successful acknowledgements reset this count. Late request results cannot overwrite newer
+  successful acknowledgements reset this count. Automatic selection then avoids that stream
+  for ten minutes, across the renewal: it ranks the remaining eligible streams normally,
+  keeps the current one among equals, and may mine a lower-priority game until the cooldown
+  ends. Several streams can be avoided at once; when all eligible streams are, one is still
+  watched. Avoidance survives renewal only for the same account. Manual choices are never
+  avoided and their failures never start avoidance; cache
+  clear or logout forget it.
+  Late request results cannot overwrite newer
   account/stream events or restore invalidated beacon addresses.
   Successful inventory refreshes clear stale estimate ceilings on refreshed and retained
   drops, preserving confirmed progress and evidence newer than the request. Failed

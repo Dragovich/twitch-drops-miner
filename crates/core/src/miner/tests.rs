@@ -4571,6 +4571,305 @@ async fn channel_choice_during_hourly_reload_is_retained_until_channels_are_read
 }
 
 #[tokio::test]
+async fn persistently_failing_channel_yields_to_another_eligible_channel() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/validate"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(validation()))
+        .mount(&server)
+        .await;
+    // The preferred channel's page never exposes a beacon address; the other one works.
+    Mock::given(method("GET"))
+        .and(path("/first"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("<html></html>"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/second"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(format!(r#"{{"beacon_url":"{}/track"}}"#, server.uri())),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/track"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    gql_mock(&server,|q|match q["operationName"].as_str().unwrap(){
+        "PlaybackAccessToken" => json!({"data":{"streamPlaybackAccessToken":null}}),
+        "AccountProfile" | "AccountBadges" => json!({"data":null}),
+        "Inventory"=>json!({"data":{"currentUser":{"inventory":{"dropCampaignsInProgress":[campaign_json("one")],"gameEventDrops":[]}}}}),
+        "DirectoryPage_Game"=>json!({"data":{"game":{"streams":{"edges":[
+            {"node":{"id":"b1","broadcaster":{"id":"10","login":"first","displayName":"First"},"game":{"id":"1","name":"Rust"},"viewersCount":100}},
+            {"node":{"id":"b2","broadcaster":{"id":"11","login":"second","displayName":"Second"},"game":{"id":"1","name":"Rust"},"viewersCount":50}}
+        ]}}}}),
+        "DropCurrentSessionContext"=>json!({"data":{"currentUser":{"dropCurrentSession":{"dropID":"drop-one","currentMinutesWatched":12}}}}),
+        "VideoPlayerStreamInfoOverlayChannel"=>json!({"data":{"user":{"id":"10","displayName":"First","stream":{"id":"b1"},"broadcastSettings":{"game":{"id":"1","name":"Rust"}}}}}),
+        "DropsHighlightService_AvailableDrops"=>json!({"data":{"channel":{"viewerDropCampaigns":[{"id":"one"}]}}}),
+        other=>panic!("unexpected operation {other}"),
+    }).await;
+    let dir = tempfile::tempdir().unwrap();
+    let (app, commands) = App::open(dir.path().to_owned()).unwrap();
+    app.settings.write().await.games_to_watch = vec!["Rust".into()];
+    session().save(dir.path()).unwrap();
+    let owner = Miner {
+        app: app.clone(),
+        commands,
+        endpoints: Endpoints::mock(&server.uri()),
+    };
+    let worker = tokio::spawn(owner.run());
+    let page = |login: &'static str| {
+        move |request: &wiremock::Request| request.url.path() == format!("/{login}")
+    };
+    let tracked = |request: &wiremock::Request| request.url.path() == "/track";
+    let validated = |request: &wiremock::Request| request.url.path() == "/oauth2/validate";
+    for failures in 1..=3 {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while requests_to(&server, page("first")).await < failures {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(requests_to(&server, tracked).await, 0);
+        skip(Duration::from_secs(61)).await;
+    }
+    // The third failure renews the generation, which must now watch the working stream.
+    // Allow for the renewal pause running in real time on a slow machine.
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while requests_to(&server, tracked).await == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the working stream was never watched after the renewal");
+    assert_eq!(requests_to(&server, validated).await, 2);
+    assert_eq!(requests_to(&server, page("first")).await, 3);
+    assert_eq!(requests_to(&server, page("second")).await, 1);
+    // The next minute neither returns to the failing stream nor renews again.
+    skip(Duration::from_secs(61)).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(requests_to(&server, validated).await, 2);
+    assert_eq!(requests_to(&server, page("first")).await, 3);
+    app.shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(5), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
+async fn requests_to(server: &MockServer, matches: impl Fn(&wiremock::Request) -> bool) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| matches(request))
+        .count()
+}
+
+async fn skip(duration: Duration) {
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::pause();
+    tokio::time::advance(duration).await;
+    tokio::time::resume();
+}
+
+fn failed_watch(miner: &Mining, channel: usize) -> Job {
+    Job::Watch {
+        channel: Box::new(miner.channels[channel].clone()),
+        result: Err(TwitchError::Network),
+        requested_at: Instant::now(),
+        at: Instant::now(),
+    }
+}
+
+async fn fail_three_watches(miner: &mut Mining, pool: &PubSub, channel: usize) {
+    for attempt in 1..=3 {
+        let completed = miner.complete(failed_watch(miner, channel), pool).await;
+        assert_eq!(completed.is_err(), attempt == 3);
+    }
+}
+
+fn add_channel(miner: &mut Mining, id: u64, viewers: u64) {
+    let mut channel = miner.channels[0].clone();
+    channel.identity.id = id;
+    channel.identity.login = format!("stream{id}");
+    channel.viewers = Some(viewers);
+    miner.channels.push(channel);
+}
+
+#[tokio::test]
+async fn failing_stream_is_avoided_only_while_another_eligible_stream_exists() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+    let settings = select(&mut miner).await;
+    assert_eq!(miner.watching, Some(10));
+    fail_three_watches(&mut miner, &pool, 0).await;
+    assert!(miner.avoided.contains_key(&10));
+    // The only eligible stream must not leave mining idle.
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    add_channel(&mut miner, 11, 1);
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(11));
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn several_failing_streams_are_all_avoided_until_a_working_one_is_reached() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+    let settings = select(&mut miner).await;
+    add_channel(&mut miner, 11, 50);
+    add_channel(&mut miner, 12, 1);
+    fail_three_watches(&mut miner, &pool, 0).await;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(11));
+    fail_three_watches(&mut miner, &pool, 1).await;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(12));
+    // With every stream failing, mining keeps a stream instead of idling.
+    fail_three_watches(&mut miner, &pool, 2).await;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(12));
+    miner.watching = None;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    pool.close().await;
+}
+
+fn add_other_game(miner: &mut Mining, channels: &[usize]) -> Settings {
+    let mut other = campaign_json("two");
+    other["game"] = json!({"id":"2","name":"Other","slug":"other"});
+    miner
+        .campaigns
+        .push(Campaign::parse(&other, &HashMap::new(), Utc::now()).unwrap());
+    for channel in channels {
+        miner.channels[*channel].game = Some(Game {
+            id: 2,
+            name: "Other".into(),
+            slug: "other".into(),
+            image_url: String::new(),
+        });
+    }
+    Settings {
+        games_to_watch: vec!["Rust".into(), "Other".into()],
+        ..Settings::default()
+    }
+}
+
+#[tokio::test]
+async fn avoidance_keeps_the_current_stream_among_equal_alternatives() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+    add_channel(&mut miner, 11, 50);
+    add_channel(&mut miner, 12, 40);
+    // The avoided stream outranks both alternatives, which are equal to each other.
+    let settings = add_other_game(&mut miner, &[1, 2]);
+    *miner.app.settings.write().await = settings.clone();
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    fail_three_watches(&mut miner, &pool, 0).await;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(11));
+    // A viewer-count change among equal streams must not move an ongoing watch.
+    miner.channels[2].viewers = Some(90);
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(11));
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn manual_choice_ignores_avoidance_and_never_starts_it() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+    let settings = select(&mut miner).await;
+    add_channel(&mut miner, 11, 1);
+    miner
+        .avoided
+        .insert(10, Instant::now() + Duration::from_secs(600));
+    miner.manual = Some(ManualSelection::new(10, None));
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    miner.avoided.clear();
+    fail_three_watches(&mut miner, &pool, 0).await;
+    assert!(miner.avoided.is_empty());
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn avoidance_survives_renewal_only_for_the_same_account() {
+    let server = MockServer::start().await;
+    let (_dir, mut original, _intent, mut pool) = miner(&server).await;
+    select(&mut original).await;
+    fail_three_watches(&mut original, &pool, 0).await;
+    let mut saved = original.resume();
+    let deadline = saved.avoided[&10];
+    for account in [Some(original.client.user_id), Some(99), None] {
+        let (_dir, mut renewed, _intent, mut renewed_pool) = miner(&server).await;
+        add_channel(&mut renewed, 11, 1);
+        saved.user_id = account;
+        renewed.restore(&saved);
+        select(&mut renewed).await;
+        if account == Some(renewed.client.user_id) {
+            assert_eq!(renewed.avoided.get(&10), Some(&deadline));
+            assert_eq!(renewed.watching, Some(11));
+        } else {
+            assert!(renewed.avoided.is_empty());
+            assert_eq!(renewed.watching, Some(10));
+        }
+        renewed_pool.close().await;
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn avoidance_ends_with_its_cooldown_or_a_cache_clear() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, intent, mut pool) = miner(&server).await;
+    let settings = select(&mut miner).await;
+    add_channel(&mut miner, 11, 1);
+    miner
+        .avoided
+        .insert(10, Instant::now() - Duration::from_secs(1));
+    miner.watching = None;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    assert!(miner.avoided.is_empty());
+    miner
+        .avoided
+        .insert(10, Instant::now() + Duration::from_secs(600));
+    intent.send_modify(|intent| intent.clear += 1);
+    miner.apply_intent(&pool).await;
+    assert!(miner.avoided.is_empty());
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn avoidance_may_use_a_lower_priority_game_and_returns_after_the_cooldown() {
+    let server = MockServer::start().await;
+    let (_dir, mut miner, _intent, mut pool) = miner(&server).await;
+    add_channel(&mut miner, 11, 500);
+    let settings = add_other_game(&mut miner, &[1]);
+    *miner.app.settings.write().await = settings.clone();
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    fail_three_watches(&mut miner, &pool, 0).await;
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(11));
+    miner
+        .avoided
+        .insert(10, Instant::now() - Duration::from_secs(1));
+    miner.reselect(&settings).await;
+    assert_eq!(miner.watching, Some(10));
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn acknowledged_claim_survives_contradictory_inventory_restart_and_history_clear() {
     let server = MockServer::start().await;
     gql_mock(
