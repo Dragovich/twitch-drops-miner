@@ -14,7 +14,7 @@ import { Icon } from '@mdi/react';
 import { Link, useNavigate } from 'react-router';
 import { useT } from '../../shared/lib/i18n';
 import { isDesktop } from '../../shared/lib/platform';
-import { Button } from '../../shared/ui';
+import { Button, ProgressBar } from '../../shared/ui';
 import UpdateCheck from './UpdateCheck';
 
 export type UpdateStatus = {
@@ -131,7 +131,7 @@ export function DesktopUpdateLink() {
   return (
     status?.version && (
       <div
-        className="desktop-update-link flex justify-end px-4 py-2 lg:justify-start lg:pt-4 lg:pb-0"
+        className="desktop-update-link flex min-w-0 flex-1 justify-end px-4 py-2 lg:justify-start lg:p-0"
         aria-live="polite"
       >
         <Link
@@ -156,6 +156,7 @@ export function DesktopUpdates() {
     status?.phase === 'downloading' ||
     status?.phase === 'installing';
   const failure = error || status?.error;
+  const downloadTotal = status?.total && status.total > 0 ? status.total : null;
   return (
     <div className="space-y-3 text-[13px]" aria-label={t('gui.desktop.updates')} role="region">
       <UpdateCheck
@@ -173,6 +174,28 @@ export function DesktopUpdates() {
               t(`gui.desktop.update_${status.phase}`, { version: status.version ?? '' })}
         </p>
       </UpdateCheck>
+      {status?.phase === 'downloading' && (
+        <div className="max-w-sm space-y-2">
+          {downloadTotal !== null && (
+            <ProgressBar
+              current={status.downloaded}
+              total={downloadTotal}
+              label={t('gui.desktop.update_downloading', { version: status.version ?? '' })}
+            />
+          )}
+          <p className="text-xs text-muted tabular-nums">
+            {downloadTotal !== null
+              ? t('gui.desktop.download_progress', {
+                  downloaded: (status.downloaded / 1_000_000).toFixed(1),
+                  total: (downloadTotal / 1_000_000).toFixed(1),
+                  percent: Math.min(100, Math.floor((status.downloaded / downloadTotal) * 100)),
+                })
+              : t('gui.desktop.download_received', {
+                  downloaded: (status.downloaded / 1_000_000).toFixed(1),
+                })}
+          </p>
+        </div>
+      )}
       {status?.version && (
         <div className="flex flex-wrap items-center gap-3">
           {status.restart_required ? (

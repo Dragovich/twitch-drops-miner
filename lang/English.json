@@ -445,6 +445,8 @@
             "update_available": "Version {version} is available.",
             "update_link": "Update v{version}",
             "update_downloading": "Downloading {version}...",
+            "download_progress": "{downloaded} / {total} MB · {percent}%",
+            "download_received": "{downloaded} MB downloaded",
             "update_ready": "The update is verified and ready to install.",
             "update_installing": "Stopping mining and installing the update...",
             "check_failed": "Could not check for updates. Try again.",

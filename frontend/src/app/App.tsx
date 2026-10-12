@@ -115,11 +115,10 @@ function Shell({ auth, onLogout }: { auth: AuthStatus; onLogout: () => Promise<v
             </NavLink>
           ))}
         </nav>
-        <div className="min-w-0 lg:mt-auto">
-          {isDesktop() && <DesktopUpdateLink />}
-          <div className="hidden p-4 lg:block">
+        <div className="min-w-0 lg:mt-auto lg:p-4">
+          <div className="flex min-w-0 items-center gap-2">
             <a
-              className="icon-button size-11"
+              className="icon-button hidden size-11 shrink-0 lg:inline-flex"
               href="https://github.com/ohne-b/twitch-drops-miner"
               target="_blank"
               rel="noreferrer"
@@ -129,6 +128,9 @@ function Shell({ auth, onLogout }: { auth: AuthStatus; onLogout: () => Promise<v
               {/* The glyph fills 20 of its 24 viewBox units: render its artwork at 32px. */}
               <Icon path={mdiGithub} className="mdi-icon size-[38.4px]!" />
             </a>
+            {isDesktop() && <DesktopUpdateLink />}
+          </div>
+          <div className="hidden lg:block">
             {data?.login.user_id != null && (
               <Link
                 to="/settings#account"

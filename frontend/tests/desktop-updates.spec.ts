@@ -109,7 +109,12 @@ test.beforeEach(async ({ page }) => {
                 if (args.action === 'check')
                   control.publish({ phase: 'checking', version: null, error: null });
                 if (args.action === 'download')
-                  control.publish({ phase: 'downloading', error: null });
+                  control.publish({
+                    phase: 'downloading',
+                    error: null,
+                    downloaded: 0,
+                    total: null,
+                  });
                 if (args.action === 'cancel')
                   control.publish({ phase: control.status.version ? 'available' : 'idle' });
                 if (args.action === 'install') control.publish({ phase: 'installing' });
@@ -151,6 +156,18 @@ for (const width of [1280, 390]) {
       window.updateFixture.publish({ phase: 'available', version: '2.0.2' }),
     );
     await expect(updates.getByRole('status')).toHaveText('Version 2.0.2 is available.');
+    const updateLink = page.getByRole('link', { name: 'Update v2.0.2', exact: true });
+    const linkBox = (await updateLink.boundingBox())!;
+    if (width >= 1024) {
+      const github = (await page.getByRole('link', { name: 'GitHub repository' }).boundingBox())!;
+      expect(linkBox.x).toBeGreaterThanOrEqual(github.x + github.width);
+      expect(
+        Math.abs(linkBox.y + linkBox.height / 2 - (github.y + github.height / 2)),
+      ).toBeLessThan(2);
+    } else {
+      const brand = (await page.locator('.brand-row').boundingBox())!;
+      expect(linkBox.y + linkBox.height).toBeLessThanOrEqual(brand.y + brand.height);
+    }
     await expect(check).toBeEnabled();
     await expect(updates.getByRole('link', { name: 'Release notes' })).toHaveAttribute(
       'href',
@@ -162,13 +179,27 @@ for (const width of [1280, 390]) {
     ).toHaveAttribute('d', mdiDownload);
     await updates.getByRole('button', { name: 'Update', exact: true }).click();
     await expect(check).toBeDisabled();
+    await expect(updates.getByText('0.0 MB downloaded', { exact: true })).toBeVisible();
+    await expect(updates.getByRole('progressbar')).toHaveCount(0);
+    await page.evaluate(() => window.updateFixture.publish({ downloaded: 2_500_000, total: 0 }));
+    await expect(updates.getByText('2.5 MB downloaded', { exact: true })).toBeVisible();
+    await expect(updates.getByRole('progressbar')).toHaveCount(0);
+    await page.evaluate(() =>
+      window.updateFixture.publish({ downloaded: 24_000_000, total: 50_000_000 }),
+    );
     await page.getByRole('link', { name: 'Mining', exact: true }).click();
     await page.getByRole('link', { name: 'Update v2.0.2', exact: true }).click();
     await expect(updates.getByRole('status')).toHaveText('Downloading 2.0.2...');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(updates.locator('[role="progressbar"], progress')).toHaveCount(0);
+    const progress = updates.getByRole('progressbar', { name: 'Downloading 2.0.2...' });
+    await expect(progress).toHaveAttribute('aria-valuenow', '24000000');
+    await expect(progress).toHaveAttribute('aria-valuemax', '50000000');
+    await expect(progress.locator('div')).toHaveAttribute('style', 'width: 48%;');
+    await expect(updates.getByText('24.0 / 50.0 MB · 48%', { exact: true })).toBeVisible();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({ path: `../artifacts/desktop-updates-downloading-${width}.png` });
     await updates.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(progress).toHaveCount(0);
     await expect(updates.getByRole('button', { name: 'Update', exact: true })).toBeEnabled();
     await updates.getByRole('button', { name: 'Update', exact: true }).click();
     await page.evaluate(() => {
@@ -180,6 +211,7 @@ for (const width of [1280, 390]) {
       });
     });
     await expect(updates.getByRole('button', { name: 'Install and restart' })).toBeEnabled();
+    await expect(progress).toHaveCount(0);
     await expect(check).toBeDisabled();
     await page.screenshot({ path: `../artifacts/desktop-updates-ready-${width}.png` });
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -198,6 +230,39 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => window.updateFixture.calls.at(-1))).toBe('install');
   });
 }
+
+test('long update labels stay beside GitHub or the compact brand without overflowing', async ({
+  page,
+}) => {
+  const version = '2.2.0-preview.123456789012345678901234567890';
+  await page.evaluate(
+    (version) => window.updateFixture.publish({ phase: 'available', version }),
+    version,
+  );
+  const link = page.getByRole('link', { name: `Update v${version}`, exact: true });
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 850 });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('title', `Version ${version} is available.`);
+    expect(await link.locator('span').evaluate((span) => span.scrollWidth > span.clientWidth)).toBe(
+      true,
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    const box = (await link.boundingBox())!;
+    const beside = (await (
+      width >= 1024
+        ? page.getByRole('link', { name: 'GitHub repository' })
+        : page.locator('.brand-row')
+    ).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(beside.x + beside.width);
+    expect(Math.abs(box.y + box.height / 2 - (beside.y + beside.height / 2))).toBeLessThan(2);
+  }
+  await page.getByRole('link', { name: 'Mining', exact: true }).click();
+  await link.focus();
+  await link.press('Enter');
+  await expect(page.getByRole('region', { name: 'App updates' })).toBeVisible();
+  expect(await page.evaluate(() => window.updateFixture.calls)).toEqual([]);
+});
 
 test('tray checks and update failures retain inline recovery', async ({ page }) => {
   const updates = page.getByRole('region', { name: 'App updates' });
