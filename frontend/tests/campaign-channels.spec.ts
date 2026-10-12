@@ -106,7 +106,14 @@ for (const width of [1280, 375]) {
       width,
     );
     await page.screenshot({ path: `../artifacts/campaign-channels-${width}.png` });
-    await page.getByRole('button', { name: 'Close details' }).click();
+    await participants.getByRole('button', { name: 'Participating channels help' }).click();
+    const help = participants.getByRole('note', { name: 'Participating channels help' });
+    await expect(help).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(help).toBeHidden();
+    await expect(detail).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(detail).toHaveCount(0);
     await expect(trigger).toBeFocused();
   });
 }
@@ -229,4 +236,39 @@ test('only an open, visible detail refreshes its channel page', async ({ page })
   await expect(page.getByRole('region', { name: 'Participating channels' })).toHaveCount(0);
   await page.clock.runFor(61000);
   expect(reads).toBe(3);
+});
+
+test('background refresh preserves keyboard focus on a still-fresh Watch action', async ({
+  page,
+}) => {
+  await page.clock.install();
+  let pending: Route | undefined;
+  let reads = 0;
+  await page.route('**/api/campaigns/channels', async (route) => {
+    if (++reads > 1) {
+      pending = route;
+      return;
+    }
+    const body = response();
+    const now = await page.evaluate(() => new Date().toISOString());
+    body.channels.forEach((channel) => {
+      channel.checked_at = now;
+    });
+    await route.fulfill({ json: body });
+  });
+  await page.goto('/campaigns?campaign=campaign-1');
+  const watch = page.getByRole('button', { name: 'Watch Streamer 1', exact: true });
+  await expect(watch).toBeEnabled();
+  await watch.focus();
+  await page.clock.runFor(31000);
+  await expect.poll(() => !!pending).toBe(true);
+  await expect(watch).toBeEnabled();
+  await expect(watch).toBeFocused();
+  const body = response();
+  const now = await page.evaluate(() => new Date().toISOString());
+  body.channels.forEach((channel) => {
+    channel.checked_at = now;
+  });
+  await pending!.fulfill({ json: body });
+  await expect(watch).toBeFocused();
 });

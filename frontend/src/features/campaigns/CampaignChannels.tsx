@@ -187,7 +187,6 @@ export function CampaignChannels({ campaign }: { campaign: Campaign }) {
                   !enabled ||
                   !campaign.active ||
                   action.busy ||
-                  loading ||
                   !!manual?.pending_channel ||
                   !!watching ||
                   online !== true ||
