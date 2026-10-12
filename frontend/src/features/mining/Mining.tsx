@@ -341,7 +341,10 @@ export default function Mining() {
                         image: channel.avatar_url,
                         description: `@${channel.login} · ${t(channel.online ? 'gui.channels.live' : 'gui.channels.offline')}${channel.online && channel.game ? ` · ${channel.game}` : ''}`,
                       }))}
-                      onSelect={(channel) => mineChannel(channel.id)}
+                      onSelect={(channel) => {
+                        setChannelInput(channel.id);
+                        mineChannel(channel.id);
+                      }}
                       onResolve={() => mineChannel(channelInput)}
                       disabled={
                         !connected ||

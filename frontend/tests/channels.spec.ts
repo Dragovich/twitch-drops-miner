@@ -290,14 +290,15 @@ test('choosing a channel suggestion validates the timer before issuing a selecti
   await timer.fill('0');
   await input.fill('sleep');
   await expect(page.getByRole('option')).toHaveCount(2);
-  await input.press('ArrowDown');
-  await input.press('Enter');
+  await page.getByRole('option').first().click();
   expect(await timer.evaluate((element: HTMLInputElement) => element.validity.rangeUnderflow)).toBe(
     true,
   );
   expect(selections).toEqual([]);
+  await expect(input).toHaveValue('sleepy_streamer');
+  await expect(timer).toBeFocused();
   await timer.fill('15');
   await timer.press('Enter');
-  await expect(page.getByText('Watching sleep', { exact: true })).toBeVisible();
-  expect(selections).toEqual([{ channel: 'sleep', duration_minutes: 15 }]);
+  await expect(page.getByText('Watching sleepy_streamer', { exact: true })).toBeVisible();
+  expect(selections).toEqual([{ channel: 'sleepy_streamer', duration_minutes: 15 }]);
 });

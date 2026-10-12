@@ -119,8 +119,8 @@ export default function SearchPicker<T extends SearchOption>({
   function select(option: T) {
     setOpen(false);
     setActive(null);
-    onSelect(option);
     input.current?.focus({ preventScroll: true });
+    onSelect(option);
   }
 
   return (
@@ -191,7 +191,7 @@ export default function SearchPicker<T extends SearchOption>({
         label={actionLabel}
         type={submit ? 'submit' : 'button'}
         aria-busy={loading || busy}
-        disabled={disabled || !value.trim() || loading}
+        disabled={disabled || !value.trim() || (!submit && loading)}
         onClick={() => {
           setOpen(true);
           if (!submit) onResolve();
@@ -204,7 +204,7 @@ export default function SearchPicker<T extends SearchOption>({
         hidden={!nativePopover && !visible}
         data-fallback-open={!nativePopover && visible ? true : undefined}
         className="search-popover"
-        onClick={() => input.current?.focus({ preventScroll: true })}
+        onClickCapture={() => input.current?.focus({ preventScroll: true })}
         onBeforeToggle={(event) => {
           if (event.newState === 'closed' && visible) {
             setOpen(false);

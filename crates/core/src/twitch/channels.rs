@@ -64,6 +64,29 @@ impl TwitchClient {
         let response = self
             .gql(Operation::StreamInfo.request(json!({"channel":login})))
             .await?;
+        // Resolver failures can null a stream too; only explicit offline evidence may wait.
+        let live = response
+            .pointer("/data/user/stream/id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty());
+        if !live
+            && response["errors"].as_array().is_some_and(|errors| {
+                errors.iter().any(|error| {
+                    error["path"].as_array().is_none_or(|path| {
+                        path.is_empty()
+                            || (path[0].as_str() == Some("user")
+                                && (path.len() == 1
+                                    || matches!(path[1].as_str(), Some("id" | "login" | "stream"))))
+                    })
+                })
+            })
+        {
+            return Err(diagnostics::invalid(
+                "StreamInfo",
+                "channel identity or stream resolver failed",
+                None,
+            ));
+        }
         let user = response
             .pointer("/data/user")
             .ok_or_else(|| diagnostics::invalid("StreamInfo", "missing user", None))?;
@@ -1539,6 +1562,58 @@ mod tests {
                 client.resolve_channel("streamer").await,
                 Err(TwitchError::InvalidResponse)
             ));
+        }
+    }
+    #[tokio::test]
+    async fn manual_lookup_distinguishes_offline_from_partial_stream_errors() {
+        let server = MockServer::start().await;
+        let client = TwitchClient::new(Arc::new(http(&server)), &session());
+        for path in [
+            Value::Null,
+            json!([]),
+            json!(["user"]),
+            json!(["user", "id"]),
+            json!(["user", "stream"]),
+            json!(["user", "stream", "id"]),
+            json!(["user", "stream", "viewersCount"]),
+        ] {
+            server.reset().await;
+            gql_mock(&server, move |_| {
+                json!({
+                    "data":{"user":{"id":"999","stream":null}},
+                    "errors":[{"message":"server error","path":path}],
+                })
+            })
+            .await;
+            assert!(matches!(
+                client.resolve_channel("streamer").await,
+                Err(TwitchError::InvalidResponse)
+            ));
+        }
+        for stream in [Value::Null, json!({"id":"live", "viewersCount":42})] {
+            let mut paths = vec![
+                json!(["user", "profileImageURL"]),
+                json!(["user", "broadcastSettings", "game"]),
+            ];
+            if !stream.is_null() {
+                paths.push(json!(["user", "stream", "viewersCount"]));
+            }
+            for path in paths {
+                server.reset().await;
+                let stream = stream.clone();
+                gql_mock(&server, move |query| match query["operationName"].as_str().unwrap() {
+                    "VideoPlayerStreamInfoOverlayChannel" => json!({
+                        "data":{"user":{"id":"999","stream":stream,"profileImageURL":null,"broadcastSettings":{"game":null}}},
+                        "errors":[{"message":"server error","path":path}],
+                    }),
+                    "DropsHighlightService_AvailableDrops" => json!({"data":{"channel":{"viewerDropCampaigns":[]}}}),
+                    _ => panic!("unexpected operation"),
+                }).await;
+                assert!(
+                    client.resolve_channel("streamer").await.unwrap().is_some(),
+                    "optional metadata failures must not reject a known identity"
+                );
+            }
         }
     }
 }

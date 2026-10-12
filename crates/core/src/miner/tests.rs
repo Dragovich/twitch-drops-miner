@@ -4841,6 +4841,22 @@ async fn initially_offline_manual_channel_waits_with_its_timer_and_starts_when_l
     miner
         .complete(
             Job::Update {
+                result: Err(TwitchError::InvalidResponse),
+                requested_at,
+            },
+            &pool,
+        )
+        .await
+        .unwrap();
+    assert!(
+        miner.refresh_channels.contains_key(&999),
+        "failed stream reads must keep their scheduled retry"
+    );
+    assert_eq!(miner.manual.unwrap().expires_at, Some(id_deadline));
+    assert!(miner.watching.is_none());
+    miner
+        .complete(
+            Job::Update {
                 result: Ok(vec![live]),
                 requested_at,
             },
