@@ -188,14 +188,19 @@ For documentation-only changes, the final row replaces the local code baseline. 
 review fixes or main integration, rerun affected checks; do not cite superseded results.
 
 PRs changing only `README.md`, `CONTRIBUTING.md` and/or `AGENTS.md` run scope and whitespace
-checks without the code/image jobs. Any other path, including changelogs, licenses,
-workflows and tests, runs full validation. Renames check both paths; an empty diff or failed
+checks without the code/image jobs. Release PRs limited to `Cargo.toml`, `Cargo.lock` and
+`CHANGELOG.md` also skip those jobs only when the Git diff changes exactly the shared
+workspace version and its three lockfile package versions, with no dependency or other
+manifest changes. Scope checks require a newer canonical SemVer and valid release notes.
+File additions, deletions and mode changes cannot use the release shortcut. Changelog-only
+PRs and all other changes, including workflows and tests, run full validation.
+Renames check both paths; an empty diff or failed
 scope check cannot authorize skipping. Every main push and manual run still validates
 everything and retains its tested images. Windows, universal macOS and Linux jobs check
 native code, exercise the offline native window, then build production packages once.
 Desktop artifacts are retained for seven days, including on PRs for manual review; PR
 artifacts can never be promoted by the release publisher. The final **Validation** check requires every
-selected job to succeed and also runs for documentation-only PRs; use it as the required
+selected job to succeed and also runs for documentation/release-only PRs; use it as the required
 status check when configuring branch protection.
 
 ## Independent adversarial review
