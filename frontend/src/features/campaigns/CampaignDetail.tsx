@@ -4,6 +4,7 @@ import { mdiClose, mdiOpenInNew, mdiReload } from '@mdi/js';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
+import { CampaignChannels } from './CampaignChannels';
 import { safeUrl } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
 import { Art, Empty, IconButton, Notice, ProgressBar, dateTime } from '../../shared/ui/index';
@@ -202,24 +203,7 @@ export function CampaignDetail({
                   </a>
                 )}
               </div>
-              {!!campaign.allowed_channels?.length && (
-                <div>
-                  <p className="mb-1 font-medium">{t('eligible_channels')}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {campaign.allowed_channels.map((channel) => (
-                      <a
-                        key={channel.login}
-                        className="text-link"
-                        href={`https://www.twitch.tv/${encodeURIComponent(channel.login)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {channel.name}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <CampaignChannels key={campaign.id} campaign={campaign} />
             </div>
             <div className="divide-y divide-divider">
               {campaign.drops.map((drop) => {

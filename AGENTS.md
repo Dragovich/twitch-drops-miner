@@ -535,6 +535,15 @@ embed it and run without a build tool/runtime companion. Production builds never
   and publishes the durable change to open dashboards; archives never recreate cleared rows.
 - History artwork is optional; retain old rows and use matching live benefits as display fallback.
   Telegram credentials never appear in responses; no server-dashboard installer/updater.
+- Live Campaign detail shows participating channels only from its actual ACL, above the shared
+  account reward list. No separate streamer tab or inferred unrestricted-campaign mapping.
+  Query only the visible ten-channel page through guarded HTTP/scoped native IPC. An owned
+  session reader shares Twitch transport and channel-matching policy, with a 30-second,
+  200-channel memory cache, serialized five-second pacing and eight-second network bounds.
+  Missing/malformed stream or drops metadata stays unknown, never inferred offline from the
+  filtered mining list. Cancel abandoned reads and fence changed account/campaign replies;
+  refresh only visible open details. Watch uses the existing validated-login manual command,
+  preserves saved games/pause, and offers Return to automatic. History remains claim-only.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games

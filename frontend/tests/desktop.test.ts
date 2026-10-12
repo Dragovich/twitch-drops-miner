@@ -32,6 +32,12 @@ it('routes only supported native requests and preserves history filters', () => 
     value: { revision: 'r', token: 'fake' },
   });
   expect(nativeRequest('/api/telegram/test', {}, 'POST')).toEqual({ kind: 'test_telegram' });
+  expect(
+    nativeRequest('/api/campaigns/channels', { campaign_id: 'one', offset: 10 }, 'POST'),
+  ).toEqual({
+    kind: 'campaign_channels',
+    value: { campaign_id: 'one', offset: 10 },
+  });
   expect(() => nativeRequest('/api/auth/settings', {}, 'POST')).toThrow();
   expect(() => nativeRequest('/api/history?limit=NaN', undefined, 'GET')).toThrow();
 });

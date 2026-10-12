@@ -39,10 +39,11 @@ export interface Campaign {
   selected?: boolean;
   saved_rank?: number | null;
   priority?: PriorityContext;
-  allowed_channels?: { login: string; name: string }[];
+  allowed_channels?: { id?: number; login: string; name: string }[];
   id: string;
   name: string;
   game_name: string;
+  game_id?: number;
   game_box_art_url: string;
   campaign_url: string;
   link_url: string;

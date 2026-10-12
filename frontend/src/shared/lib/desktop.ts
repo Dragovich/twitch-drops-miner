@@ -18,6 +18,7 @@ export function nativeRequest(path: string, data: unknown, method: string) {
     '/api/telegram/test': 'test_telegram',
     '/api/channels/select': 'select_channel',
     '/api/games': 'games',
+    '/api/campaigns/channels': 'campaign_channels',
     '/api/settings/verify-proxy': 'verify_proxy',
     '/api/reload': 'reload',
     '/api/cache/clear': 'clear_cache',
@@ -43,7 +44,14 @@ export function nativeRequest(path: string, data: unknown, method: string) {
   if (!kind) throw new ApiError(404, 'request_failed');
   return {
     kind,
-    ...(['save_settings', 'save_telegram', 'select_channel', 'games', 'verify_proxy'].includes(kind)
+    ...([
+      'save_settings',
+      'save_telegram',
+      'select_channel',
+      'games',
+      'campaign_channels',
+      'verify_proxy',
+    ].includes(kind)
       ? { value: data }
       : {}),
   };
