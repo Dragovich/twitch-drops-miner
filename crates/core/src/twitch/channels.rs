@@ -64,20 +64,27 @@ impl TwitchClient {
         let response = self
             .gql(Operation::StreamInfo.request(json!({"channel":login})))
             .await?;
+        let user = response
+            .pointer("/data/user")
+            .ok_or_else(|| diagnostics::invalid("StreamInfo", "missing user", None))?;
         // Resolver failures can null a stream too; only explicit offline evidence may wait.
-        let live = response
-            .pointer("/data/user/stream/id")
+        let live = user
+            .pointer("/stream/id")
             .and_then(Value::as_str)
             .is_some_and(|id| !id.is_empty());
         if !live
             && response["errors"].as_array().is_some_and(|errors| {
                 errors.iter().any(|error| {
-                    error["path"].as_array().is_none_or(|path| {
-                        path.is_empty()
-                            || (path[0].as_str() == Some("user")
-                                && (path.len() == 1
-                                    || matches!(path[1].as_str(), Some("id" | "login" | "stream"))))
-                    })
+                    user.is_null()
+                        || error["path"].as_array().is_none_or(|path| {
+                            path.is_empty()
+                                || (path[0].as_str() == Some("user")
+                                    && (path.len() == 1
+                                        || matches!(
+                                            path[1].as_str(),
+                                            Some("id" | "login" | "stream")
+                                        )))
+                        })
                 })
             })
         {
@@ -87,9 +94,6 @@ impl TwitchClient {
                 None,
             ));
         }
-        let user = response
-            .pointer("/data/user")
-            .ok_or_else(|| diagnostics::invalid("StreamInfo", "missing user", None))?;
         if user.is_null() {
             return Ok(None);
         }
@@ -1590,6 +1594,26 @@ mod tests {
                 Err(TwitchError::InvalidResponse)
             ));
         }
+        for path in [
+            json!(["user", "profileImageURL"]),
+            json!(["user", "broadcastSettings", "game"]),
+        ] {
+            server.reset().await;
+            gql_mock(&server, move |_| {
+                json!({
+                    "data":{"user":null},
+                    "errors":[{"message":"server error","path":path}],
+                })
+            })
+            .await;
+            assert!(matches!(
+                client.resolve_channel("streamer").await,
+                Err(TwitchError::InvalidResponse)
+            ));
+        }
+        server.reset().await;
+        gql_mock(&server, |_| json!({"data":{"user":null}})).await;
+        assert!(client.resolve_channel("missing").await.unwrap().is_none());
         for stream in [Value::Null, json!({"id":"live", "viewersCount":42})] {
             let mut paths = vec![
                 json!(["user", "profileImageURL"]),
