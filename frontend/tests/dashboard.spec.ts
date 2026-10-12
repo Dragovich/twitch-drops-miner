@@ -648,7 +648,7 @@ test('mining confirmation stays beside selection mode inside Now mining', async 
   const refresh = header.getByRole('button', { name: 'Refresh inventory', exact: true });
   for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(confirmed).toContainText('Last confirmed:');
+    await expect(confirmed).toContainText('Confirmed ');
     await expect(confirmed).toHaveAttribute('datetime', snapshot.current_drop!.confirmed_at!);
     await expect(confirmed).toHaveCSS('color', 'rgb(136, 136, 136)');
     await expect(confirmed).toHaveCSS('font-size', '12px');
@@ -784,7 +784,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
     'No confirmed progress yet',
   );
   await expect(mining.getByRole('progressbar').locator('div')).toHaveCSS('width', '0px');
-  await expect(page.getByText(/Last confirmed:/)).toHaveCount(0);
+  await expect(page.getByText(/Confirmed /)).toHaveCount(0);
   await expect(page.getByText(/Waiting for Twitch progress/)).toHaveCount(0);
 
   await page.goto('/campaigns?campaign=campaign-1');
@@ -801,7 +801,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
     await expect(bar).toHaveAccessibleDescription('No confirmed progress yet');
     await expect(bar.locator('div')).toHaveCSS('width', '0px');
   }
-  await expect(details.getByText(/Last confirmed:|Waiting for Twitch progress/)).toHaveCount(0);
+  await expect(details.getByText(/Confirmed |Waiting for Twitch progress/)).toHaveCount(0);
 
   await request.post('/__test/event', {
     headers,
@@ -814,7 +814,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
   await expect(count).toBeVisible();
   await expect(count).not.toHaveAttribute('title');
   await expect(mining.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
-  await expect(page.getByText(/Last confirmed:/)).toBeVisible();
+  await expect(page.getByText(/Confirmed /)).toBeVisible();
   await request.post('/__test/event', {
     headers,
     data: { event: 'drop_progress_stop', data: {} },
@@ -822,7 +822,7 @@ test('unconfirmed rewards show minute counts without inventing confirmation', as
   await expect(mining.getByText('No confirmed progress yet', { exact: true })).toBeVisible();
   await expect(mining.getByText(/\d+ \/ \d+ min/)).toHaveCount(0);
   await expect(mining.getByRole('progressbar')).toHaveCount(0);
-  await expect(page.getByText(/Last confirmed:/)).toHaveCount(0);
+  await expect(page.getByText(/Confirmed /)).toHaveCount(0);
 });
 test('Up next scrolls within its panel with reward artwork and safe fallbacks', async ({
   page,

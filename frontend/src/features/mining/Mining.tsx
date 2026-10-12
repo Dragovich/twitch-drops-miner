@@ -31,6 +31,7 @@ import {
   useAction,
   ActionResult,
   dateTime,
+  ConfirmedTime,
   Input,
 } from '../../shared/ui/index';
 export default function Mining() {
@@ -121,9 +122,10 @@ export default function Mining() {
           </h2>
           <div className="ms-auto flex items-center gap-3">
             {progress?.confirmed_at && (
-              <time dateTime={progress.confirmed_at} className="text-right text-xs text-[#888888]">
-                {t('last_confirmed', { time: dateTime(progress.confirmed_at) })}
-              </time>
+              <ConfirmedTime
+                value={progress.confirmed_at}
+                className="text-right text-xs text-[#888888]"
+              />
             )}
             {data.manual_mode.active ? (
               <span className="muted">{t('manual')}</span>

@@ -391,7 +391,9 @@ embed it and run without a build tool/runtime companion. Production builds never
 
 - All displayed times, including tooltips, use the 24-hour `h23` clock (midnight is `00:00`),
   preserving the browser's timezone and locale date format. Use the shared date/time formatter;
-  Activity's time-only display retains seconds. Keep API/storage timestamps unchanged.
+  Activity's time-only display retains seconds. Confirmed progress times show HH:mm today,
+  add month/day on other days and retain years outside the current year; refresh the label
+  at local midnight. Tooltips and accessible labels retain the full date/time. Keep API/storage timestamps unchanged.
 - Use `frontend/src/assets/twitch-drops-miner-logo.svg` for the app, login, favicon and README.
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.

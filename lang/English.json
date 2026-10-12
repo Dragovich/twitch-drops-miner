@@ -176,7 +176,7 @@
             "watch": "Watch",
             "watch_channel": "Watch {channel}",
             "minutes_progress": "{current} / {total} min",
-            "last_confirmed": "Last confirmed: {time}",
+            "last_confirmed": "Confirmed {time}",
             "connect_help": "Authorize your Twitch account to load campaigns.",
             "waiting_help": "Waiting for an eligible reward and live channel. The miner checks automatically.",
             "search_channels": "Search channels",

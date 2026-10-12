@@ -6,7 +6,15 @@ import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
 import { safeUrl } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
-import { Art, Empty, IconButton, Notice, ProgressBar, dateTime } from '../../shared/ui/index';
+import {
+  Art,
+  Empty,
+  IconButton,
+  Notice,
+  ProgressBar,
+  dateTime,
+  ConfirmedTime,
+} from '../../shared/ui/index';
 
 export function CampaignDetail({
   campaign: liveCampaign,
@@ -256,9 +264,7 @@ export function CampaignDetail({
                           })}
                         </p>
                         {drop.confirmed_at && (
-                          <p className="muted">
-                            {t('last_confirmed', { time: dateTime(drop.confirmed_at) })}
-                          </p>
+                          <ConfirmedTime value={drop.confirmed_at} className="muted block" />
                         )}
                       </div>
                     )}
