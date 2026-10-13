@@ -378,7 +378,10 @@ export default function Campaigns() {
                 onToggle={() => setPopover(popover === 'filters' ? null : 'filters')}
                 onClose={() => setPopover((current) => (current === 'filters' ? null : current))}
               >
-                <div className="min-h-0 overflow-y-auto overscroll-contain p-3">
+                <div
+                  tabIndex={0}
+                  className="min-h-0 overflow-y-auto overscroll-contain p-3 focus-visible:bg-field"
+                >
                   {filterOptions.map(([key, name]) => (
                     <Check
                       key={key}

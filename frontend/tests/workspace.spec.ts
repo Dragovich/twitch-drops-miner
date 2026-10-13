@@ -1200,6 +1200,17 @@ for (const view of ['grid', 'list']) {
     page,
     request,
   }) => {
+    if (view === 'list')
+      await page.addInitScript(() => {
+        Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+          value: undefined,
+          configurable: true,
+        });
+        Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
+          value: undefined,
+          configurable: true,
+        });
+      });
     const campaigns = Array.from({ length: 30 }, (_, index) => ({
       ...fixture.campaigns[0]!,
       id: `long-${index}`,
@@ -1246,6 +1257,16 @@ for (const view of ['grid', 'list']) {
       await games.focus();
       await games.press('End');
       await expect.poll(() => games.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      const filters = page.getByRole('button', { name: 'Filters', exact: true });
+      await filters.click();
+      await filters.press('Tab');
+      const options = page
+        .getByRole('group', { name: 'Filters', exact: true })
+        .locator('[tabindex="0"]');
+      await expect(options).toBeFocused();
+      await options.press('End');
+      await expect.poll(() => options.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect(options.getByRole('checkbox', { name: 'Other', exact: true })).toBeInViewport();
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(360);
     } finally {
