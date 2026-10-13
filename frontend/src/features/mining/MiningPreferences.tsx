@@ -235,7 +235,7 @@ export default function MiningPreferences() {
                 role="region"
                 aria-label={t('game_priorities')}
                 tabIndex={0}
-                className="scroll-list relative max-h-[440px] min-h-0 scroll-py-1 overflow-y-auto focus-visible:bg-field focus-visible:[&_.panel]:bg-field lg:max-h-none lg:flex-1 lg:overscroll-y-contain"
+                className="panel scroll-list relative max-h-[440px] min-h-0 scroll-py-1 overflow-y-auto focus-visible:bg-field lg:max-h-none lg:flex-1 lg:overscroll-y-contain"
               >
                 <fieldset disabled={!connected}>
                   <GamePriorities
@@ -265,6 +265,12 @@ export default function MiningPreferences() {
                   />
                   <HelpButton label={t('auto_claim_drops')} text={t('auto_claim_drops_help')} />
                 </div>
+                <Check
+                  label={t('show_progress_percentage')}
+                  checked={draft.show_progress_percentage}
+                  disabled={!connected}
+                  onChange={(value) => change('show_progress_percentage', value)}
+                />
                 <fieldset
                   disabled={!connected}
                   aria-label={t('auto_mine_types')}

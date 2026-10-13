@@ -248,6 +248,10 @@
   border-radius: 0;
   background: transparent;
 }
+.campaign-results.campaign-results-list {
+  padding-inline-end: 0;
+  scrollbar-gutter: stable;
+}
 .campaign-list > .campaign-summary + .campaign-summary::before {
   position: absolute;
   inset: 0 16px auto;

@@ -456,6 +456,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   core eligibility, independent of mining selection and ignores. Details retain all rewards
   and prerequisites. Remove retired status, linkage and Other controls; ignore their old saved
   values and query flags. Preserve existing game/type choices without a settings migration.
+  Do not use middle-dot (U+00B7) separators in authored UI text or documentation,
+  except the README's Quick start / Dashboard / Updating / Troubleshooting navigation.
+  Use wording, commas, colons or parentheses instead.
   Icon-only actions use borderless transparent buttons with circular hover/keyboard backgrounds,
   accessible names and tooltips.
   History pagination uses chevrons beside the page count; channel watch/entry, return-to-auto,
@@ -477,6 +480,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   Mining preferences also contains the global Automatically claim drops checkbox, using shared
   autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
   expiry, prerequisites, outstanding claims on re-enable and already-started requests.
+  Show progress percentage defaults off and uses the same saved settings in both wrappers.
+  When enabled, Now mining appends the confirmed percentage in parentheses beside minutes.
+  Share rounding with the window/tray title, never round incomplete progress up to 100%,
+  and omit percentages for unknown progress or invalid watch requirements.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox
@@ -572,8 +579,11 @@ embed it and run without a build tool/runtime companion. Production builds never
   with an unconfirmed tooltip and accessible description. Suppress the redundant awaiting-progress
   subtitle when a reward is shown. Keep unknown evidence unchanged; never display estimates as
   confirmed minutes or invent a confirmation timestamp or a duration for an unknown reward.
-  Channels, Up next and game-priority rows have inset separators and modest 4px scrollbar
-  padding, smaller than Campaigns. Up next shows a shared date once only when reward windows
+  Bordered lists keep their scrollbar inside a stationary frame. Mining preferences Games
+  and Campaigns/History list view put the border on the scroll container, not the moving rows.
+  Cap these lists at 440px on smaller screens; retain their remaining-height desktop layout.
+  Campaign grid cards keep their existing layout. Channels, Up next and game-priority rows
+  retain inset separators and modest 4px scrollbar padding. Up next shows a shared date once only when reward windows
   match by instant and their upcoming state agrees; retain distinct per-drop dates.
   Channel views may fill missing game artwork from catalog records with the exact same game
   ID. Never change stream identity/eligibility or add network requests for this fallback.
@@ -631,8 +641,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   page on smaller screens. Lock page scrolling while the full-page detail is open and contain
   its body scrolling; release the lock on close, navigation or return to the desktop layout.
   At desktop widths tabs, search and filters stay full width above the list and detail columns.
-  Split those columns equally, using a 12px layout gap plus the results scrollbar and its
-  1px card clearance, keeping the visible spacing close to the normal 16px grid gap.
+  Split those columns equally with a 12px layout gap. Grid results retain their outer
+  scrollbar gutter and 1px card clearance; list results keep the gutter inside the border.
   Both columns fill the remaining height with a compact 12px bottom margin; details keep the
   same height for short and long campaigns, with a fixed header and separately scrollable body.
   Scroll campaign results independently with a small scrollbar gutter; allow the controls area

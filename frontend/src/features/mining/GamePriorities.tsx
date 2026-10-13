@@ -80,7 +80,6 @@ export function GamePriorities({
         {t('reorder_help')}
       </p>
       <div
-        className="panel"
         ref={list}
         role="list"
         tabIndex={-1}
