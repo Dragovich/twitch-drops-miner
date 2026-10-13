@@ -1184,11 +1184,7 @@ test('campaign sort controls preserve filters and keep counts and resets in comp
   await expect(page.getByRole('button', { name: 'Clear filters', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
   const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
-  const all = page.getByRole('button', { name: 'All games', exact: true });
-  const allBox = (await all.boundingBox())!;
-  const clearBox = (await clear.boundingBox())!;
-  expect(Math.abs(allBox.y - clearBox.y)).toBeLessThan(2);
-  expect(clearBox.x).toBeGreaterThan(allBox.x + allBox.width);
+  await expect(page.getByRole('button', { name: 'All games', exact: true })).toHaveCount(0);
   await clear.click();
   await expect(titles).toHaveText(['beta campaign', 'Alpha campaign', 'Zeta campaign']);
   await expect(sort).toHaveValue('newest');
@@ -1231,10 +1227,12 @@ test('campaign sort controls preserve filters and keep counts and resets in comp
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 750 });
     await expect(sort).toBeVisible();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await expect(clear).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
     );
+    await page.keyboard.press('Escape');
   }
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: '../artifacts/campaign-sort-phone.png', fullPage: true });
@@ -1306,6 +1304,7 @@ test('History contains recorded claims independently of campaign completion and 
   await expect(page.getByText('Expired campaign', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Ignored campaign', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'Item', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Games', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Rust', exact: true }).check();
   await expect(page.getByText('Historical campaign', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'All games', exact: true }).click();
@@ -1370,7 +1369,7 @@ test('History claims honor game filters and retry failed loading', async ({ page
   await expect(retry).toHaveAttribute('title', 'Try again');
   await retry.click();
   await expect(page.getByText('Historical campaign', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByRole('button', { name: /^Games/ }).click();
   await expect(page.getByRole('checkbox', { name: 'Old game', exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Rust', exact: true }).check();
   await expect(page.getByText('Historical campaign', { exact: true })).toHaveCount(0);
@@ -1703,7 +1702,7 @@ test('saved game filters can be cleared after a campaign disappears', async ({ p
   });
   await page.goto('/campaigns');
   await expect(page.getByText('No matching results')).toBeVisible();
-  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByRole('button', { name: /^Games/ }).click();
   await expect(page.getByLabel('Old game', { exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'All games', exact: true }).click();
   await expect(page.getByText('Autumn expedition', { exact: true })).toBeVisible();
@@ -2155,7 +2154,9 @@ test('phone campaign rows retain claimed counts and independent mining actions',
   await request.post('/api/settings', { headers, data: { games_to_watch: [] } });
   await page.goto('/campaigns');
   await expect(page.locator('.campaign-count')).toContainText('0/2');
-  await expect(page.getByText('Active', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.campaign-summary').getByText('Active', { exact: true })).toHaveCount(
+    0,
+  );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '../artifacts/campaigns-phone.png', fullPage: true });
   await page.getByRole('button', { name: 'Mine Rust', exact: true }).click();
@@ -2686,17 +2687,22 @@ test('History shares sort, search, game filters and layout while paging recorded
   await expect(titles.first()).toHaveText('Campaign 0');
   await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).fill('Benefit 26');
   await expect(titles).toHaveText(['Campaign 26']);
-  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByRole('button', { name: /^Games/ }).click();
   await page.getByRole('checkbox', { name: 'Rust', exact: true }).check();
   await expect(page.getByText('No matching results', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await page.getByRole('button', { name: 'All games', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Games', exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).fill('');
+  await expect(page.getByRole('button', { name: 'Games', exact: true })).toBeVisible();
   await expect(titles).toHaveCount(25);
   await expect(sort).toHaveValue('name');
   await page.getByRole('button', { name: 'Change campaign layout', exact: true }).click();
   await expect(page.locator('main .campaign-summary').first().locator('..')).toHaveClass(/grid/);
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: /^Games/ }).click();
   await page.getByRole('checkbox', { name: 'Old game', exact: true }).check();
   await expect(titles).toHaveText(['Campaign 26']);
+  await page.keyboard.press('Escape');
   await page.getByText('Campaign 26', { exact: true }).click();
   await page.screenshot({ path: '../artifacts/history-phone.png', fullPage: true });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

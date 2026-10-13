@@ -162,6 +162,10 @@
   align-items: stretch;
   gap: 20px;
 }
+.campaign-popover {
+  inset: auto;
+  padding: 0;
+}
 .campaign-columns {
   display: grid;
   min-height: 0;
@@ -372,10 +376,6 @@
   .campaign-tools > *,
   .campaign-browser > :not(.campaign-results) {
     flex-shrink: 0;
-  }
-  .campaign-filters {
-    max-height: min(256px, 40dvh);
-    overflow-y: auto;
   }
   .campaign-results,
   .campaign-detail .detail-body {

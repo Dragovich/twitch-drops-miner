@@ -110,6 +110,15 @@ describe('boundary behavior', () => {
     expect(matchesCampaign({ ...campaign, mining_finished: true }, filters, '')).toBe(true);
     expect(matchesCampaign({ ...campaign, drops: [] }, filters, '')).toBe(true);
     expect(matchesCampaign(campaign, { ...filters, game_name_search: ['RUST'] }, '')).toBe(true);
+    expect(matchesCampaign(campaign, { ...filters, hide_selected_games: true }, '', true)).toBe(
+      false,
+    );
+    expect(matchesCampaign(campaign, { ...filters, hide_selected_games: true }, '', false)).toBe(
+      true,
+    );
+    expect(matchesCampaign(campaign, { ...filters, hide_selected_games: false }, '', true)).toBe(
+      true,
+    );
     expect(
       matchesCampaign(
         campaign,

@@ -89,6 +89,7 @@ export interface Filters {
   show_expired: boolean;
   show_finished: boolean;
   show_only_not_linked: boolean;
+  hide_selected_games: boolean;
   show_benefit_badge: boolean;
   show_benefit_emote: boolean;
   show_benefit_item: boolean;

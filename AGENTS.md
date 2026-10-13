@@ -440,6 +440,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.
 - Keep the subtle charcoal/Manrope design, individual `@mdi/js` paths rendered with `@mdi/react`, and shared native controls.
+  Campaign Games and Filters use separate button-anchored overlays without moving results.
+  Games retains saved multi-selection and has one scrolling checklist below its search.
+  History shows Games only. Bound both overlays to the viewport, support older webviews,
+  and retain keyboard access, outside dismissal and Escape focus return.
+  Hide selected games defaults true when absent and affects Available display only, using
+  the same folded game selection as Mine. Remember the filter, preserve History and direct
+  detail links, and recover focus/pagination when selecting a game removes its cards.
   Icon-only actions use borderless transparent buttons with circular hover/keyboard backgrounds,
   accessible names and tooltips.
   History pagination uses chevrons beside the page count; channel watch/entry, return-to-auto,
@@ -596,8 +603,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   lookups. Streamer browsing and manual Watch actions belong in Mining's existing Channels panel.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
-  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games
-  inside Filters. On phones put pagination to the right of the tabs, then a full-width search
+  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays inside Filters;
+  All games stays inside Games. On phones put pagination to the right of the tabs, then a full-width search
   row, followed by filter/sort/view controls and the count/refresh pair, wrapping when needed.
   Below 375px omit the decorative tab icons to make room; retain both text labels.
   Native icon-styled sorting offers Default, Newest (campaign start descending),

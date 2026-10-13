@@ -147,6 +147,7 @@
             "filters": {
                 "active": "Active",
                 "not_linked": "Not Linked",
+                "hide_selected_games": "Hide selected games",
                 "upcoming": "Upcoming",
                 "finished": "Finished",
                 "item": "Item",
@@ -221,6 +222,8 @@
             "link_account": "Link account",
             "details": "Details on Twitch",
             "game": "Game",
+            "games": "Games",
+            "show_selected_games": "Show selected games",
             "all_games": "All games",
             "recorded_claims": "{count} claimed",
             "claimed_at": "Claimed {time}",

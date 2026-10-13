@@ -56,6 +56,7 @@ pub struct Filters {
     pub show_expired: bool,
     pub show_finished: bool,
     pub show_only_not_linked: bool,
+    pub hide_selected_games: bool,
     pub show_benefit_badge: bool,
     pub show_benefit_emote: bool,
     pub show_benefit_item: bool,
@@ -71,6 +72,7 @@ impl Default for Filters {
             show_expired: false,
             show_finished: false,
             show_only_not_linked: false,
+            hide_selected_games: true,
             show_benefit_badge: true,
             show_benefit_emote: true,
             show_benefit_item: true,
@@ -141,6 +143,10 @@ impl Settings {
     pub fn from_saved(mut value: Value) -> Result<Self, InvalidSettings> {
         let mut legacy = serde_json::to_value(Filters::default()).map_err(|_| InvalidSettings)?;
         legacy["show_active"] = false.into();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("hide_selected_games");
         if value.get("inventory_filters_version").is_none()
             && value.get("inventory_filters") == Some(&legacy)
         {
@@ -410,6 +416,26 @@ mod tests {
     }
 
     #[test]
+    fn hide_selected_games_defaults_on_and_preserves_explicit_choices() {
+        let old = Settings::from_saved(json!({"games_to_watch":["Rust"],
+            "inventory_filters":{"show_upcoming":false}}))
+        .unwrap();
+        assert!(old.inventory_filters.hide_selected_games);
+        assert!(!old.inventory_filters.show_upcoming);
+        let visible = old
+            .patched(&json!({"inventory_filters":{"hide_selected_games":false}}))
+            .unwrap();
+        let restored = Settings::from_saved(serde_json::to_value(&visible).unwrap()).unwrap();
+        assert!(!restored.inventory_filters.hide_selected_games);
+        assert!(!restored.inventory_filters.show_upcoming);
+        assert_eq!(restored.games_to_watch, ["Rust"]);
+        assert!(
+            old.patched(&json!({"inventory_filters":{"hide_selected_games":"true"}}))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn defaults_and_partial_updates_preserve_selection() {
         let settings = Settings::default()
             .patched(
@@ -433,6 +459,10 @@ mod tests {
             .unwrap()
             .remove("inventory_filters_version");
         old["inventory_filters"]["show_active"] = false.into();
+        old["inventory_filters"]
+            .as_object_mut()
+            .unwrap()
+            .remove("hide_selected_games");
         assert!(
             Settings::from_saved(old.clone())
                 .unwrap()

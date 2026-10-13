@@ -1079,10 +1079,10 @@ test('campaign panes fill the height below full-width controls and keep row hove
       .getByRole('group', { name: 'Filters', exact: true })
       .boundingBox())!;
     const filteredBounds = (await detail.boundingBox())!;
-    expect(filters.x).toBe(toolbar.x);
-    expect(filters.width).toBeCloseTo(toolbar.width, 0);
+    expect(filters.x).toBeGreaterThanOrEqual(toolbar.x);
+    expect(filters.width).toBeLessThanOrEqual(320);
     expect(filteredBounds.y).toBe((await list.boundingBox())!.y);
-    expect(filteredBounds.y).toBeGreaterThan(bounds.y);
+    expect(filteredBounds).toEqual(bounds);
     expect(filteredBounds.y + filteredBounds.height).toBe(viewport.height - 12);
     await expect(
       detail.getByRole('heading', { name: 'Campaign 01', exact: true }),
@@ -1237,7 +1237,7 @@ for (const view of ['grid', 'list']) {
     await expect(next).toBeFocused();
     await expect(next).toBeInViewport({ ratio: 0.99 });
     await page.setViewportSize({ width: 1280, height: 360 });
-    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    await page.getByRole('button', { name: /^Games/ }).click();
     await page.context().setOffline(true);
     try {
       await request.post('/__test/reconnect', { headers, data: {} });

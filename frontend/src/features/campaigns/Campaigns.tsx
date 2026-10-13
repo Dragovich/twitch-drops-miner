@@ -1,10 +1,12 @@
 import { CampaignDetail } from './CampaignDetail';
+import FilterPopover from './FilterPopover';
 import { displayFilters, writeFilters } from './query';
 import { Icon } from '@mdi/react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   mdiFilterOutline,
+  mdiGamepadVariantOutline,
   mdiViewList,
   mdiViewGridOutline,
   mdiSortAscending,
@@ -33,8 +35,14 @@ import {
 } from '../../shared/ui/index';
 import { Campaign } from './Campaign';
 import History, { useHistory, groupHistory, matchesHistory, historyOrder } from './History';
-export function matchesCampaign(campaign: CampaignData, filters: Filters, search: string): boolean {
+export function matchesCampaign(
+  campaign: CampaignData,
+  filters: Filters,
+  search: string,
+  selectedForMining = false,
+): boolean {
   if (campaign.finished || campaign.expired) return false;
+  if (filters.hide_selected_games && selectedForMining) return false;
   if (
     search &&
     !`${campaign.name} ${campaign.game_name} ${campaign.drops.map((drop) => drop.name).join(' ')}`
@@ -134,9 +142,11 @@ export default function Campaigns() {
       returnPosition.current = null;
     }
   }, [detailId, hydrated, list]);
-  const [showFilters, setShowFilters] = useState(false);
+  const [popover, setPopover] = useState<'games' | 'filters' | null>(null);
+  const [gameSearch, setGameSearch] = useState('');
   const [filterDraft, setFilterDraft] = useState<{ key: string; filters: Filters } | null>(null);
   const historyTab = ['history', 'finished'].includes(params.get('tab') ?? '');
+  useEffect(() => setPopover(null), [historyTab, detailId]);
   const history = useHistory(historyTab || !!detailId);
   const action = useAction();
   if (!data) return <Empty title={t('loading')} />;
@@ -144,8 +154,13 @@ export default function Campaigns() {
     filterDraft?.key === location.key
       ? filterDraft.filters
       : displayFilters(params, (autosave.draft ?? data.settings).inventory_filters);
+  // Navigation can still be pending when another control edits the query.
+  const currentParams =
+    filterDraft?.key === location.key ? writeFilters(params, filterDraft.filters) : params;
   const selectedGames = (autosave.draft ?? data.settings).games_to_watch;
   const gameKey = (game: string) => data.settings.game_keys?.[game] ?? game.toLowerCase();
+  const isSelected = (name: string) =>
+    selectedGames.some((game) => gameKey(game) === gameKey(name));
   const settingsBusy = action.busy;
   const search = params.get('q') ?? '';
 
@@ -154,7 +169,9 @@ export default function Campaigns() {
   const available = data.campaigns.filter((campaign) => !campaign.finished && !campaign.expired);
   const total = historyTab ? groups.length : available.length;
   const campaigns = available
-    .filter((campaign) => matchesCampaign(campaign, filters, search))
+    .filter((campaign) =>
+      matchesCampaign(campaign, filters, search, isSelected(campaign.game_name)),
+    )
     .sort((a, b) => campaignOrder(a, b, sort));
   const historical = groups
     .filter((group) => matchesHistory(group, filters.game_name_search, search))
@@ -164,14 +181,14 @@ export default function Campaigns() {
     Math.max(0, Math.ceil((historyTab ? historical : campaigns).length / 25) - 1),
   );
   function setQuery(key: string, value: string) {
-    const next = new URLSearchParams(params);
+    const next = new URLSearchParams(currentParams);
     if (key !== 'page' && key !== 'campaign' && key !== 'drop') next.delete('page');
     value ? next.set(key, value) : next.delete(key);
     setParams(next, { replace: true, state: location.state });
   }
   function changeFilters(next: Filters, clearSearch = false) {
     setFilterDraft({ key: location.key, filters: next });
-    const query = writeFilters(params, next);
+    const query = writeFilters(currentParams, next);
     if (clearSearch) query.delete('q');
     setParams(query, { replace: true, state: location.state });
     const touched = Object.fromEntries(
@@ -188,7 +205,7 @@ export default function Campaigns() {
       list,
       id,
     };
-    const next = new URLSearchParams(params);
+    const next = new URLSearchParams(currentParams);
     next.set('campaign', id);
     next.delete('drop');
     navigate(
@@ -204,7 +221,7 @@ export default function Campaigns() {
     );
   }
   const tabQuery = (history: boolean) => {
-    const next = new URLSearchParams(params);
+    const next = new URLSearchParams(currentParams);
     next.delete('page');
     next.delete('campaign');
     next.delete('drop');
@@ -221,6 +238,7 @@ export default function Campaigns() {
   const filterOptions: [keyof Omit<Filters, 'game_name_search'>, string][] = [
     ['show_active', 'active'],
     ['show_upcoming', 'upcoming'],
+    ['hide_selected_games', 'hide_selected_games'],
     ['show_only_not_linked', 'not_linked'],
     ['show_benefit_badge', 'badge'],
     ['show_benefit_emote', 'emote'],
@@ -287,12 +305,118 @@ export default function Campaigns() {
             />
           </div>
           <div className="campaign-controls flex items-center justify-end gap-2">
-            <IconButton
-              path={mdiFilterOutline}
-              label={t('filters')}
-              aria-expanded={showFilters}
-              onClick={() => setShowFilters(!showFilters)}
-            />
+            <FilterPopover
+              icon={mdiGamepadVariantOutline}
+              label={t('games')}
+              count={filters.game_name_search.length}
+              active={!!filters.game_name_search.length}
+              open={popover === 'games'}
+              onToggle={() => setPopover(popover === 'games' ? null : 'games')}
+              onClose={() => setPopover((current) => (current === 'games' ? null : current))}
+            >
+              <div className="shrink-0 p-3">
+                <Search
+                  value={gameSearch}
+                  onChange={setGameSearch}
+                  label={t('gui.settings.search_games')}
+                />
+              </div>
+              <div
+                role="group"
+                aria-label={t('game')}
+                tabIndex={0}
+                className="scroll-list min-h-0 overflow-y-auto overscroll-contain px-3 focus-visible:bg-field"
+              >
+                {games
+                  .filter((game) =>
+                    game.toLocaleLowerCase().includes(gameSearch.trim().toLocaleLowerCase()),
+                  )
+                  .map((game) => (
+                    <Check
+                      key={game}
+                      label={game}
+                      checked={filters.game_name_search.includes(game)}
+                      disabled={!connected || settingsBusy}
+                      onChange={(checked) =>
+                        changeFilters({
+                          ...filters,
+                          game_name_search: checked
+                            ? [...filters.game_name_search, game]
+                            : filters.game_name_search.filter((name) => name !== game),
+                        })
+                      }
+                    />
+                  ))}
+                {!games.some((game) =>
+                  game.toLocaleLowerCase().includes(gameSearch.trim().toLocaleLowerCase()),
+                ) && <p className="muted py-2">{t('no_matches')}</p>}
+              </div>
+              <div className="shrink-0 p-3">
+                <Button
+                  disabled={!connected || settingsBusy || !filters.game_name_search.length}
+                  onClick={() => changeFilters({ ...filters, game_name_search: [] })}
+                >
+                  {t('all_games')}
+                </Button>
+              </div>
+            </FilterPopover>
+            {!historyTab && (
+              <FilterPopover
+                icon={mdiFilterOutline}
+                label={t('filters')}
+                open={popover === 'filters'}
+                active={
+                  filters.hide_selected_games ||
+                  filters.show_only_not_linked ||
+                  !filters.show_active ||
+                  !filters.show_upcoming ||
+                  !filters.show_benefit_badge ||
+                  !filters.show_benefit_emote ||
+                  !filters.show_benefit_item ||
+                  !filters.show_benefit_other
+                }
+                onToggle={() => setPopover(popover === 'filters' ? null : 'filters')}
+                onClose={() => setPopover((current) => (current === 'filters' ? null : current))}
+              >
+                <div className="min-h-0 overflow-y-auto overscroll-contain p-3">
+                  {filterOptions.map(([key, name]) => (
+                    <Check
+                      key={key}
+                      label={t(`gui.inventory.filters.${name}`)}
+                      checked={filters[key]}
+                      disabled={!connected || settingsBusy}
+                      onChange={(value) => changeFilters({ ...filters, [key]: value })}
+                    />
+                  ))}
+                </div>
+                <div className="shrink-0 border-t border-divider p-3">
+                  <Button
+                    disabled={!connected || settingsBusy}
+                    onClick={() =>
+                      changeFilters(
+                        {
+                          ...filters,
+                          show_active: true,
+                          show_upcoming: true,
+                          show_finished: true,
+                          show_only_not_linked: false,
+                          hide_selected_games: false,
+                          game_name_search: [],
+                          show_benefit_badge: true,
+                          show_benefit_emote: true,
+                          show_benefit_item: true,
+                          show_benefit_other: true,
+                        },
+                        true,
+                      )
+                    }
+                  >
+                    <Icon path={mdiFilterOffOutline} className="mdi-icon" />
+                    {t('clear_filters')}
+                  </Button>
+                </div>
+              </FilterPopover>
+            )}
             <div
               className="icon-button"
               title={`${t(historyTab ? 'sort_history' : 'sort_campaigns')}: ${t(`sort_${sort}`)}`}
@@ -318,7 +442,7 @@ export default function Campaigns() {
               label={t('toggle_view')}
               disabled={!connected || settingsBusy}
               onClick={() => {
-                const next = new URLSearchParams(params);
+                const next = new URLSearchParams(currentParams);
                 next.set('view', list ? 'grid' : 'list');
                 setParams(next, { replace: true, state: location.state });
                 autosave.change('inventory_list_view', !list);
@@ -329,84 +453,6 @@ export default function Campaigns() {
         {!historyTab &&
           data.inventory_status?.available === false &&
           data.inventory_status.checked_at && <Notice error>{t('campaigns_unavailable')}</Notice>}
-        {showFilters && (
-          <div
-            role="group"
-            aria-label={t('filters')}
-            tabIndex={!connected ? 0 : undefined}
-            className="campaign-filters panel space-y-4 p-4 focus-visible:border-control"
-          >
-            {!historyTab && (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-3">
-                {filterOptions.map(([key, name]) => (
-                  <Check
-                    key={key}
-                    label={t(`gui.inventory.filters.${name}`)}
-                    checked={filters[key]}
-                    disabled={!connected || settingsBusy}
-                    onChange={(value) => changeFilters({ ...filters, [key]: value })}
-                  />
-                ))}
-              </div>
-            )}
-            <div className={historyTab ? '' : 'border-t border-divider pt-3'}>
-              <p className="mb-2 text-[13px] font-medium">{t('game')}</p>
-              <div
-                role="group"
-                aria-label={t('game')}
-                tabIndex={!connected ? 0 : undefined}
-                className="grid max-h-48 grid-cols-1 overflow-y-auto focus-visible:bg-field sm:grid-cols-2"
-              >
-                {games.map((game) => (
-                  <Check
-                    key={game}
-                    label={game}
-                    checked={filters.game_name_search.includes(game)}
-                    disabled={!connected || settingsBusy}
-                    onChange={(checked) =>
-                      changeFilters({
-                        ...filters,
-                        game_name_search: checked
-                          ? [...filters.game_name_search, game]
-                          : filters.game_name_search.filter((name) => name !== game),
-                      })
-                    }
-                  />
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <Button
-                  disabled={!connected || settingsBusy || !filters.game_name_search.length}
-                  onClick={() => changeFilters({ ...filters, game_name_search: [] })}
-                >
-                  {t('all_games')}
-                </Button>
-                <IconButton
-                  path={mdiFilterOffOutline}
-                  label={t('clear_filters')}
-                  disabled={!connected || settingsBusy}
-                  onClick={() => {
-                    changeFilters(
-                      {
-                        ...filters,
-                        show_active: true,
-                        show_upcoming: true,
-                        show_finished: true,
-                        show_only_not_linked: false,
-                        game_name_search: [],
-                        show_benefit_badge: true,
-                        show_benefit_emote: true,
-                        show_benefit_item: true,
-                        show_benefit_other: true,
-                      },
-                      true,
-                    );
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       <div className="campaign-columns">
         <div className="campaign-browser min-w-0">
@@ -449,22 +495,29 @@ export default function Campaigns() {
                       !campaign.expired && (
                         <IconButton
                           path={
-                            selectedGames.some(
-                              (game) => gameKey(game) === gameKey(campaign.game_name),
-                            )
+                            isSelected(campaign.game_name)
                               ? mdiStopCircleOutline
                               : mdiPlayCircleOutline
                           }
                           disabled={!connected || action.busy}
                           label={t(
-                            selectedGames.some(
-                              (game) => gameKey(game) === gameKey(campaign.game_name),
-                            )
-                              ? 'stop_mining_game'
-                              : 'mine_game',
+                            isSelected(campaign.game_name) ? 'stop_mining_game' : 'mine_game',
                             { game: campaign.game_name },
                           )}
-                          onClick={() => {
+                          data-mine-game={campaign.game_name}
+                          onClick={(event) => {
+                            const actions = [
+                              ...(results.current?.querySelectorAll<HTMLButtonElement>(
+                                '[data-mine-game]',
+                              ) ?? []),
+                            ];
+                            const position = actions.indexOf(event.currentTarget);
+                            const next = [
+                              ...actions.slice(position + 1),
+                              ...actions.slice(0, position).reverse(),
+                            ];
+                            const hiding =
+                              filters.hide_selected_games && !isSelected(campaign.game_name);
                             autosave.change('games_to_watch', (games) =>
                               games.some((game) => gameKey(game) === gameKey(campaign.game_name))
                                 ? games.filter(
@@ -472,6 +525,12 @@ export default function Campaigns() {
                                   )
                                 : [...games, campaign.game_name],
                             );
+                            if (hiding)
+                              requestAnimationFrame(() =>
+                                (
+                                  next.find((button) => button.isConnected) ?? results.current
+                                )?.focus({ preventScroll: true }),
+                              );
                           }}
                         />
                       )
@@ -490,7 +549,25 @@ export default function Campaigns() {
                   <Empty
                     title={t(available.length ? 'no_matches' : 'no_available_campaigns')}
                     detail={t('campaign_empty_help')}
-                  />
+                  >
+                    {filters.hide_selected_games &&
+                      available.some(
+                        (campaign) =>
+                          isSelected(campaign.game_name) &&
+                          matchesCampaign(
+                            campaign,
+                            { ...filters, hide_selected_games: false },
+                            search,
+                          ),
+                      ) && (
+                        <Button
+                          onClick={() => changeFilters({ ...filters, hide_selected_games: false })}
+                          disabled={!connected || settingsBusy}
+                        >
+                          {t('show_selected_games')}
+                        </Button>
+                      )}
+                  </Empty>
                 )}
           </div>
         </div>

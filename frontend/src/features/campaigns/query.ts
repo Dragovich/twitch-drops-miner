@@ -5,6 +5,7 @@ const flags: (keyof Omit<Filters, 'game_name_search'>)[] = [
   'show_upcoming',
   'show_finished',
   'show_only_not_linked',
+  'hide_selected_games',
   'show_benefit_badge',
   'show_benefit_emote',
   'show_benefit_item',
