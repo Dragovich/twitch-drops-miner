@@ -1110,9 +1110,9 @@ test('campaign filtering and truthful expanded progress', async ({ page }) => {
   await expect(page.getByText('42 / 60 min')).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByLabel('Not Linked', { exact: true }).check();
+  await page.getByLabel('Game items', { exact: true }).uncheck();
   await expect(page.getByText('No matching results')).toBeVisible();
-  await page.getByLabel('Not Linked', { exact: true }).uncheck();
+  await page.getByLabel('Game items', { exact: true }).check();
   await expect(page.getByText('Autumn expedition', { exact: true })).toBeVisible();
 });
 
@@ -1176,7 +1176,7 @@ test('campaign sort controls preserve filters and keep counts and resets in comp
   expect(writes).toEqual([]);
   await sort.selectOption('newest');
   await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).fill('Alpha');
-  await expect(page.getByText('3 campaigns', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 of 3 campaigns', { exact: true })).toBeVisible();
   await page.reload();
   await expect(sort).toHaveValue('newest');
   await publishCampaigns();
