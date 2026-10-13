@@ -463,6 +463,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   Mining preferences also contains the global Automatically claim drops checkbox, using shared
   autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
   expiry, prerequisites, outstanding claims on re-enable and already-started requests.
+  Show progress percentage defaults off and uses the same saved settings in both wrappers.
+  When enabled, Now mining appends the confirmed percentage in parentheses beside minutes.
+  Share rounding with the window/tray title, never round incomplete progress up to 100%,
+  and omit percentages for unknown progress or invalid watch requirements.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox

@@ -1,4 +1,5 @@
 import type { Snapshot } from '../shared/lib/types';
+import { confirmedPercent } from '../shared/lib/progress';
 
 export function miningTitle(
   data: Snapshot | null,
@@ -15,12 +16,8 @@ export function miningTitle(
     return `${t('tab_idle')} - ${app}`;
   const drop = data.current_drop;
   if (drop) {
-    const minutes = drop.confirmed_minutes;
-    const percent =
-      drop.confirmed_at && Number.isFinite(minutes) && drop.required_minutes > 0
-        ? `${Math.floor(Math.min(100, Math.max(0, (minutes! * 100) / drop.required_minutes)))}% `
-        : '';
-    return `${percent}${drop.game_name} - ${app}`;
+    const percent = confirmedPercent(drop);
+    return `${percent === null ? '' : `${percent}% `}${drop.game_name} - ${app}`;
   }
   const channel = data.channels.find((channel) => channel.watching);
   return channel ? `${t('tab_watching')} ${channel.name} - ${app}` : `${t('tab_idle')} - ${app}`;

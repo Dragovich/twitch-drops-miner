@@ -95,6 +95,7 @@ pub struct Settings {
     pub game_metadata: Vec<GameMetadata>,
     pub mining_paused: bool,
     pub auto_claim_drops: bool,
+    pub show_progress_percentage: bool,
     pub mining_priority_mode: MiningPriorityMode,
     pub auto_mine_badges: bool,
     pub auto_mine_emotes: bool,
@@ -115,6 +116,7 @@ impl Default for Settings {
             game_metadata: vec![],
             mining_paused: false,
             auto_claim_drops: true,
+            show_progress_percentage: false,
             mining_priority_mode: MiningPriorityMode::Manual,
             auto_mine_badges: false,
             auto_mine_emotes: false,
@@ -405,6 +407,30 @@ mod tests {
         assert!(
             settings
                 .patched(&json!({"auto_mine_badges":"true"}))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn progress_percentage_defaults_off_and_survives_settings_updates() {
+        let old = Settings::from_saved(json!({"games_to_watch":["Rust"]})).unwrap();
+        assert!(!old.show_progress_percentage);
+        let enabled = old
+            .patched(&json!({"show_progress_percentage":true}))
+            .unwrap();
+        let updated = enabled.patched(&json!({"mining_paused":true})).unwrap();
+        let restored = Settings::from_saved(serde_json::to_value(&updated).unwrap()).unwrap();
+        assert!(restored.show_progress_percentage);
+        assert!(restored.mining_paused);
+        assert_eq!(restored.games_to_watch, ["Rust"]);
+        assert!(
+            !restored
+                .patched(&json!({"show_progress_percentage":false}))
+                .unwrap()
+                .show_progress_percentage
+        );
+        assert!(
+            old.patched(&json!({"show_progress_percentage":"true"}))
                 .is_err()
         );
     }

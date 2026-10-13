@@ -265,6 +265,12 @@ export default function MiningPreferences() {
                   />
                   <HelpButton label={t('auto_claim_drops')} text={t('auto_claim_drops_help')} />
                 </div>
+                <Check
+                  label={t('show_progress_percentage')}
+                  checked={draft.show_progress_percentage}
+                  disabled={!connected}
+                  onChange={(value) => change('show_progress_percentage', value)}
+                />
                 <fieldset
                   disabled={!connected}
                   aria-label={t('auto_mine_types')}
