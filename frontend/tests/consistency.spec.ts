@@ -392,7 +392,7 @@ test('Available rewards show claims once with truthful times and uncropped artwo
     await expect(art).toHaveCSS('object-fit', 'contain');
   entries[0]!.claimed_at_is_observed = true;
   await page.reload();
-  await expect(claimed.getByText(/^Claimed · First observed/)).toBeVisible();
+  await expect(claimed.getByText(/^Claimed: First observed/)).toBeVisible();
   await page.goto('/campaigns?tab=history&campaign=campaign-1&drop=reward-1');
   await expect(page.locator('#history-drop-reward-1 img')).toHaveCSS('object-fit', 'contain');
   await expect(page.locator('#history-drop-reward-1')).toHaveCSS('border-left-width', '0px');
