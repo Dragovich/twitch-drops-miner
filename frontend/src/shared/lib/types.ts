@@ -84,16 +84,10 @@ export interface Channel {
 }
 export interface Filters {
   game_name_search: string[];
-  show_active: boolean;
-  show_upcoming: boolean;
-  show_expired: boolean;
-  show_finished: boolean;
-  show_only_not_linked: boolean;
   hide_selected_games: boolean;
   show_benefit_badge: boolean;
   show_benefit_emote: boolean;
   show_benefit_item: boolean;
-  show_benefit_other: boolean;
 }
 export interface Settings {
   game_metadata: GameMetadata[];

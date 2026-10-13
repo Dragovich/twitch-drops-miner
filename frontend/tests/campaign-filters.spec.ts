@@ -7,6 +7,114 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__test/reset', { headers, data: {} });
 });
 
+test('reward filters use remaining rewards, keep full details and report matching counts', async ({
+  page,
+  request,
+}) => {
+  const base = fixture.campaigns[0]!;
+  const item = base.drops[0]!;
+  const badge = {
+    ...item,
+    id: 'badge',
+    name: 'Chat badge',
+    benefits: [{ ...item.benefits[0]!, type: 'BADGE' }],
+  };
+  const campaigns = [
+    { ...base, id: 'items', name: 'Game emote', game_name: 'Game A', drops: [item] },
+    {
+      ...base,
+      id: 'claimed',
+      name: 'Claimed badge',
+      drops: [{ ...badge, is_claimed: true }, item],
+    },
+    {
+      ...base,
+      id: 'expired',
+      name: 'Expired badge',
+      drops: [{ ...badge, eligibility: 'expired' }, item],
+    },
+    {
+      ...base,
+      id: 'badge',
+      name: 'Badge campaign',
+      drops: [item, { ...badge, prerequisites: [item.id], eligibility: 'prerequisite' }],
+    },
+    {
+      ...base,
+      id: 'emote',
+      name: 'Future chat emote',
+      active: false,
+      upcoming: true,
+      linked: null,
+      drops: [
+        { ...item, eligibility: 'upcoming', benefits: [{ ...item.benefits[0]!, type: 'EMOTE' }] },
+      ],
+    },
+    {
+      ...base,
+      id: 'unknown',
+      name: 'Unknown reward',
+      drops: [{ ...item, benefits: [{ ...item.benefits[0]!, type: 'UNKNOWN' }] }],
+    },
+  ];
+  const before = await (await request.get('/api/settings')).json();
+  await request.post('/__test/event', {
+    headers,
+    data: { event: 'inventory_batch_update', data: { campaigns } },
+  });
+  await page.goto(
+    '/campaigns?show_active=0&show_upcoming=0&show_only_not_linked=1&show_benefit_other=0',
+  );
+  const count = page.locator('.campaign-refresh');
+  await expect(count).toContainText('6 campaigns');
+  await expect(page.locator('.campaign-summary')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  const filters = page.getByRole('group', { name: 'Filters', exact: true });
+  await expect(filters.getByRole('checkbox')).toHaveCount(4);
+  await filters.getByRole('checkbox', { name: 'Twitch emotes', exact: true }).uncheck();
+  await filters.getByRole('checkbox', { name: 'Game items', exact: true }).uncheck();
+  await expect(count).toContainText('1 of 6 campaigns');
+  await expect(page.locator('.campaign-summary')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Open Badge campaign', exact: true }).click();
+  const details = page.locator('#campaign-details');
+  await expect(
+    details.getByRole('heading', { name: 'Explorer jacket', exact: true }),
+  ).toBeVisible();
+  await expect(details.getByRole('heading', { name: 'Chat badge', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get('/api/settings')).json()).inventory_filters.show_benefit_item,
+    )
+    .toBe(false);
+  await page.reload();
+  await expect(count).toContainText('1 of 6 campaigns');
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await filters.getByRole('checkbox', { name: 'Twitch badges', exact: true }).uncheck();
+  await expect(count).toContainText('0 of 6 campaigns');
+  await expect(page.getByText('No matching results', { exact: true })).toBeVisible();
+  await filters.getByRole('checkbox', { name: 'Twitch emotes', exact: true }).check();
+  await expect(count).toContainText('1 of 6 campaigns');
+  await expect(
+    page.getByRole('button', { name: 'Open Future chat emote', exact: true }),
+  ).toBeVisible();
+  await filters.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect(count).toContainText('6 campaigns');
+  await expect(page).not.toHaveURL(
+    /show_active|show_upcoming|show_only_not_linked|show_benefit_other/,
+  );
+  await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).fill('Game emote');
+  await expect(count).toContainText('1 of 6 campaigns');
+  await page.getByRole('link', { name: 'History', exact: true }).click();
+  await expect(count).toContainText('0 of 1 campaigns');
+  await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).fill('');
+  await expect(count).toContainText('1 campaigns');
+  const after = await (await request.get('/api/settings')).json();
+  expect(after.games_to_watch).toEqual(before.games_to_watch);
+  expect(after.mining_benefits).toEqual(before.mining_benefits);
+});
+
 test.describe('phone game filters', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
@@ -81,9 +189,10 @@ for (const [width, height, fallback, filtersScroll] of [
   [1440, 900, false, false],
   [1280, 360, false, true],
   [390, 844, false, false],
-  [320, 640, true, true],
+  [320, 640, true, false],
+  [320, 480, true, true],
 ] as const) {
-  test(`campaign popovers overlay stationary results at ${width}px${fallback ? ' without native popovers' : ''}`, async ({
+  test(`campaign popovers overlay stationary results at ${width}x${height}${fallback ? ' without native popovers' : ''}`, async ({
     page,
     request,
   }) => {
@@ -130,7 +239,7 @@ for (const [width, height, fallback, filtersScroll] of [
       false,
     );
     expect(await results.evaluate((element) => element.scrollTop)).toBe(scroll);
-    await page.screenshot({ path: `../artifacts/campaign-games-${width}.png` });
+    await page.screenshot({ path: `../artifacts/campaign-games-${width}-${height}.png` });
     await popup.getByRole('searchbox').fill('Game 59');
     await expect(popup.getByRole('checkbox')).toHaveCount(1);
     await popup.getByRole('checkbox').check();
@@ -162,7 +271,7 @@ for (const [width, height, fallback, filtersScroll] of [
     ).toBeInViewport();
     expect(await results.boundingBox()).toEqual(before);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await page.screenshot({ path: `../artifacts/campaign-filters-${width}.png` });
+    await page.screenshot({ path: `../artifacts/campaign-filters-${width}-${height}.png` });
     await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).click();
     await expect(filters).toBeHidden();
     await page.getByRole('link', { name: 'History', exact: true }).click();

@@ -145,17 +145,10 @@
             "ignored_precondition_reason": "Ignored because it depends on {drop}",
             "skipped_branch_reason": "Skipped because no mineable reward depends on this drop.",
             "filters": {
-                "active": "Active",
-                "not_linked": "Not Linked",
                 "hide_selected_games": "Hide selected games",
-                "upcoming": "Upcoming",
-                "finished": "Finished",
-                "item": "Item",
-                "badge": "Badge",
-                "emote": "Emote",
-                "other": "Other",
-                "clear": "Clear Filters",
-                "search_placeholder": "Type to search games..."
+                "item": "Game items",
+                "badge": "Twitch badges",
+                "emote": "Twitch emotes"
             }
         },
         "history": {
@@ -218,6 +211,8 @@
             "sort_drops": "Most Drops",
             "sort_name": "A-Z",
             "campaign_count": "{total} campaigns",
+            "campaign_filtered_count": "{shown} of {total} campaigns",
+            "campaign_reward_types": "Reward types",
             "campaign_empty_help": "Check the filters and Twitch account status, or refresh the inventory.",
             "link_account": "Link account",
             "details": "Details on Twitch",

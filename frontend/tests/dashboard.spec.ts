@@ -1303,7 +1303,7 @@ test('History contains recorded claims independently of campaign completion and 
   await expect(page.getByText('Completed campaign', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Expired campaign', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Ignored campaign', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('checkbox', { name: 'Item', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Game items', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Games', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Rust', exact: true }).check();
   await expect(page.getByText('Historical campaign', { exact: true })).toBeVisible();

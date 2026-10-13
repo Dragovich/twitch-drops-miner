@@ -50,13 +50,6 @@ export function matchesCampaign(
       .includes(search.toLocaleLowerCase())
   )
     return false;
-  const selected = filters.show_active || filters.show_upcoming;
-  if (
-    selected &&
-    !((filters.show_active && campaign.active) || (filters.show_upcoming && campaign.upcoming))
-  )
-    return false;
-  if (filters.show_only_not_linked && campaign.linked !== false) return false;
   if (
     filters.game_name_search.length &&
     !filters.game_name_search.some(
@@ -64,23 +57,19 @@ export function matchesCampaign(
     )
   )
     return false;
-  if (
-    filters.show_benefit_badge &&
-    filters.show_benefit_emote &&
-    filters.show_benefit_item &&
-    filters.show_benefit_other
-  )
+  if (filters.show_benefit_badge && filters.show_benefit_emote && filters.show_benefit_item)
     return true;
   const types: Record<string, boolean> = {
     BADGE: filters.show_benefit_badge,
     EMOTE: filters.show_benefit_emote,
     DIRECT_ENTITLEMENT: filters.show_benefit_item,
-    UNKNOWN: filters.show_benefit_other,
   };
-  return campaign.drops.some((drop) =>
-    drop.benefits.some(
-      (benefit) => types[benefit.type.toUpperCase()] ?? filters.show_benefit_other,
-    ),
+  return campaign.drops.some(
+    (drop) =>
+      drop.required_minutes > 0 &&
+      !drop.is_claimed &&
+      drop.eligibility !== 'expired' &&
+      drop.benefits.some((benefit) => types[benefit.type.toUpperCase()]),
   );
 }
 const campaignSorts = ['default', 'newest', 'ending', 'drops', 'name'] as const;
@@ -176,6 +165,7 @@ export default function Campaigns() {
   const historical = groups
     .filter((group) => matchesHistory(group, filters.game_name_search, search))
     .sort((a, b) => historyOrder(a, b, sort));
+  const shown = historyTab ? historical.length : campaigns.length;
   const page = Math.min(
     Math.max(0, Math.trunc(Number(params.get('page'))) || 0),
     Math.max(0, Math.ceil((historyTab ? historical : campaigns).length / 25) - 1),
@@ -236,14 +226,9 @@ export default function Campaigns() {
     ]),
   ].sort();
   const filterOptions: [keyof Omit<Filters, 'game_name_search'>, string][] = [
-    ['show_active', 'active'],
-    ['show_upcoming', 'upcoming'],
-    ['hide_selected_games', 'hide_selected_games'],
-    ['show_only_not_linked', 'not_linked'],
     ['show_benefit_badge', 'badge'],
     ['show_benefit_emote', 'emote'],
     ['show_benefit_item', 'item'],
-    ['show_benefit_other', 'other'],
   ];
   return (
     <div className={`campaign-workspace ${detailId ? 'with-detail' : ''}`}>
@@ -293,7 +278,7 @@ export default function Campaigns() {
           )}
           <div className="campaign-refresh flex items-center justify-self-end gap-3">
             <p className="text-xs whitespace-nowrap text-[#888888]">
-              {t('campaign_count', { total })}
+              {t(shown === total ? 'campaign_count' : 'campaign_filtered_count', { shown, total })}
             </p>
             <InventoryRefreshButton />
           </div>
@@ -368,13 +353,9 @@ export default function Campaigns() {
                 open={popover === 'filters'}
                 active={
                   filters.hide_selected_games ||
-                  filters.show_only_not_linked ||
-                  !filters.show_active ||
-                  !filters.show_upcoming ||
                   !filters.show_benefit_badge ||
                   !filters.show_benefit_emote ||
-                  !filters.show_benefit_item ||
-                  !filters.show_benefit_other
+                  !filters.show_benefit_item
                 }
                 onToggle={() => setPopover(popover === 'filters' ? null : 'filters')}
                 onClose={() => setPopover((current) => (current === 'filters' ? null : current))}
@@ -383,15 +364,24 @@ export default function Campaigns() {
                   tabIndex={0}
                   className="min-h-0 overflow-y-auto overscroll-contain p-3 focus-visible:bg-field"
                 >
-                  {filterOptions.map(([key, name]) => (
-                    <Check
-                      key={key}
-                      label={t(`gui.inventory.filters.${name}`)}
-                      checked={filters[key]}
-                      disabled={!connected || settingsBusy}
-                      onChange={(value) => changeFilters({ ...filters, [key]: value })}
-                    />
-                  ))}
+                  <Check
+                    label={t('gui.inventory.filters.hide_selected_games')}
+                    checked={filters.hide_selected_games}
+                    disabled={!connected || settingsBusy}
+                    onChange={(value) => changeFilters({ ...filters, hide_selected_games: value })}
+                  />
+                  <fieldset className="mt-3">
+                    <legend className="text-xs text-muted">{t('campaign_reward_types')}</legend>
+                    {filterOptions.map(([key, name]) => (
+                      <Check
+                        key={key}
+                        label={t(`gui.inventory.filters.${name}`)}
+                        checked={filters[key]}
+                        disabled={!connected || settingsBusy}
+                        onChange={(value) => changeFilters({ ...filters, [key]: value })}
+                      />
+                    ))}
+                  </fieldset>
                 </div>
                 <div className="shrink-0 border-t border-divider p-3">
                   <Button
@@ -400,16 +390,11 @@ export default function Campaigns() {
                       changeFilters(
                         {
                           ...filters,
-                          show_active: true,
-                          show_upcoming: true,
-                          show_finished: true,
-                          show_only_not_linked: false,
                           hide_selected_games: false,
                           game_name_search: [],
                           show_benefit_badge: true,
                           show_benefit_emote: true,
                           show_benefit_item: true,
-                          show_benefit_other: true,
                         },
                         true,
                       )

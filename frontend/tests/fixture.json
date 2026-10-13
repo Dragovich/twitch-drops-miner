@@ -134,16 +134,10 @@
     },
     "inventory_filters": {
       "game_name_search": [],
-      "show_active": true,
-      "show_upcoming": true,
-      "show_expired": false,
-      "show_finished": false,
-      "show_only_not_linked": false,
       "hide_selected_games": false,
       "show_benefit_badge": true,
       "show_benefit_emote": true,
-      "show_benefit_item": true,
-      "show_benefit_other": true
+      "show_benefit_item": true
     },
     "inventory_list_view": true
   },

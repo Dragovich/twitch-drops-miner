@@ -94,18 +94,11 @@ describe('boundary behavior', () => {
     expect(translator({})('watch_channel', { channel: '<b>name</b>' })).toBe('Watch <b>name</b>');
     expect(plainText('🎮 Active ✔')).toBe('Active');
   });
-  it('combines campaign statuses with OR and link filtering with AND', () => {
+  it('combines game selection and search without excluding unknown linkage or future campaigns', () => {
     const campaign = snapshot.campaigns[0]!;
     const filters = snapshot.settings.inventory_filters;
-    expect(matchesCampaign(campaign, { ...filters, show_upcoming: true }, '')).toBe(true);
-    expect(matchesCampaign(campaign, { ...filters, show_only_not_linked: true }, '')).toBe(false);
-    expect(
-      matchesCampaign(
-        { ...campaign, linked: null },
-        { ...filters, show_only_not_linked: true },
-        '',
-      ),
-    ).toBe(false);
+    expect(matchesCampaign({ ...campaign, linked: null }, filters, '')).toBe(true);
+    expect(matchesCampaign({ ...campaign, linked: false }, filters, '')).toBe(true);
     expect(matchesCampaign({ ...campaign, finished: true }, filters, '')).toBe(false);
     expect(matchesCampaign({ ...campaign, mining_finished: true }, filters, '')).toBe(true);
     expect(matchesCampaign({ ...campaign, drops: [] }, filters, '')).toBe(true);
@@ -127,7 +120,6 @@ describe('boundary behavior', () => {
           show_benefit_badge: false,
           show_benefit_emote: false,
           show_benefit_item: false,
-          show_benefit_other: false,
         },
         '',
       ),

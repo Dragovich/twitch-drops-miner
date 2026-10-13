@@ -1266,7 +1266,9 @@ for (const view of ['grid', 'list']) {
       await expect(options).toBeFocused();
       await options.press('End');
       await expect.poll(() => options.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-      await expect(options.getByRole('checkbox', { name: 'Other', exact: true })).toBeInViewport();
+      await expect(
+        options.getByRole('checkbox', { name: 'Game items', exact: true }),
+      ).toBeInViewport();
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(360);
     } finally {
@@ -1531,7 +1533,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
   await page.getByRole('link', { name: 'Campaigns', exact: true }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Active', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Twitch badges', exact: true }).uncheck();
   await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
   connection.send('42["protocol_mismatch",{"protocol":3}]');
   const reload = page.getByRole('button', { name: 'Reload dashboard', exact: true });
@@ -1543,7 +1545,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   await expect(page.getByRole('alert')).toContainText('Your unsaved edits were restored');
   const before = await (await request.get('/api/settings')).json();
   expect(before.mining_benefits.BADGE).toBe(true);
-  expect(before.inventory_filters.show_active).toBe(true);
+  expect(before.inventory_filters.show_benefit_badge).toBe(true);
   expect(
     (
       await request.post('/api/settings', {
@@ -1551,7 +1553,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
         data: {
           revision: before.revision,
           mining_benefits: { EMOTE: false },
-          inventory_filters: { show_upcoming: false },
+          inventory_filters: { show_benefit_emote: false },
           connection_quality: 5,
         },
       })
@@ -1569,8 +1571,8 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   const saved = await (await request.get('/api/settings')).json();
   expect(saved.inventory_filters).toEqual({
     ...before.inventory_filters,
-    show_active: false,
-    show_upcoming: false,
+    show_benefit_badge: false,
+    show_benefit_emote: false,
   });
   expect(saved.mining_benefits).toEqual({ ...before.mining_benefits, BADGE: false, EMOTE: false });
   expect(saved.connection_quality).toBe(5);
