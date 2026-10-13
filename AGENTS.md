@@ -563,8 +563,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   Channels, Up next and game-priority rows have inset separators and modest 4px scrollbar
   padding, smaller than Campaigns. Up next groups collapse independently. Compact game headers
   show artwork, name, reward count and a chevron; keep saved order and nearest deadline in the
-  header tooltip and accessible description. Pin each game's header within its own group while
-  scrolling, with bounded name wrapping and scroll padding for keyboard focus. Use a responsive
+  header tooltip and accessible description. Use the shared circular icon-button hover/focus
+  style on the chevron, with the whole heading remaining actionable. Pin each game's header
+  within its own group while scrolling, with bounded name wrapping and scroll padding for
+  keyboard focus. Use a responsive
   reward grid without nested cards, retaining one column on phones. Keep priority explanations
   in the campaign link tooltip and full campaign details, without repeating the deadline below it.
   Expand the first game initially and whenever
