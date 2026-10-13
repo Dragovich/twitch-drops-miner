@@ -415,7 +415,7 @@ export default function Campaigns() {
             role="region"
             aria-label={t(historyTab ? 'gui.tabs.history' : 'campaigns')}
             tabIndex={0}
-            className="campaign-results relative space-y-5 focus-visible:bg-field focus-visible:[&_.panel]:border-control"
+            className={`campaign-results relative space-y-5 focus-visible:bg-field focus-visible:border-control focus-visible:[&_.panel]:border-control ${list ? 'campaign-results-list panel max-h-[440px] overflow-y-auto overscroll-y-contain xl:max-h-none' : ''}`}
           >
             <ActionResult action={action} />
             {historyTab && history.error && (
@@ -424,13 +424,7 @@ export default function Campaigns() {
                 <IconButton path={mdiReload} label={t('retry')} onClick={history.retry} />
               </Notice>
             )}
-            <div
-              className={
-                list
-                  ? 'campaign-list panel overflow-hidden'
-                  : 'campaign-grid grid gap-4 md:grid-cols-2'
-              }
-            >
+            <div className={list ? 'campaign-list' : 'campaign-grid grid gap-4 md:grid-cols-2'}>
               {historyTab ? (
                 <History
                   groups={historical.slice(page * 25, (page + 1) * 25)}
