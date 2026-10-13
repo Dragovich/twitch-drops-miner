@@ -221,6 +221,7 @@
             "campaign_count": "{total} campaigns",
             "campaign_empty_help": "Check the filters and Twitch account status, or refresh the inventory.",
             "link_account": "Connect game account",
+            "connect": "Connect",
             "details": "Details on Twitch",
             "game": "Game",
             "all_games": "All games",

@@ -25,6 +25,7 @@ export function CampaignDetail({
   retryHistory: () => void;
 }) {
   const campaign = historyOnly ? undefined : liveCampaign;
+  const priority = campaign && !campaign.finished && !campaign.expired ? campaign.priority : null;
   const { data, connected } = useMiner();
   const mining =
     connected &&
@@ -99,13 +100,27 @@ export function CampaignDetail({
             campaign?.game_box_art_url || history?.metadata?.game_box_art_url ? 'cover' : 'contain'
           }
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 wrap-anywhere">
           <h2 ref={heading} tabIndex={-1} className="text-lg font-semibold">
             {title}
           </h2>
           <p className="muted">{campaign?.game_name ?? history?.game}</p>
         </div>
-        <IconButton path={mdiClose} label={t('close_details')} onClick={close} />
+        <div className="flex shrink-0 items-center gap-1">
+          {safeUrl(campaign?.campaign_url) && (
+            <a
+              className="icon-button"
+              aria-label={t('open_twitch_campaign')}
+              title={t('open_twitch_campaign')}
+              href={safeUrl(campaign?.campaign_url)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Icon path={mdiOpenInNew} className="mdi-icon" />
+            </a>
+          )}
+          <IconButton path={mdiClose} label={t('close_details')} onClick={close} />
+        </div>
       </header>
       <div
         role="region"
@@ -144,85 +159,73 @@ export function CampaignDetail({
         {campaign && (
           <>
             <div className="space-y-3 text-[13px] pb-5">
-              <p className="text-muted">
-                {dateTime(campaign.starts_at)} — {dateTime(campaign.ends_at)}
-              </p>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-muted">
+                <p>
+                  {dateTime(campaign.starts_at)} — {dateTime(campaign.ends_at)}
+                </p>
+                {priority && (
+                  <span title={priority.deadline ? dateTime(priority.deadline) : undefined}>
+                    {t(`reason_${priority.reason}`)}
+                  </span>
+                )}
+              </div>
               <p>
                 {campaign.claimed_drops} / {campaign.total_drops} {t('gui.inventory.claimed_drops')}
               </p>
-              <p className="muted">
-                {t(
-                  campaign.linked === true
-                    ? 'account_linked'
-                    : campaign.linked === false
-                      ? 'not_linked_detail'
-                      : 'link_unknown',
-                )}
-              </p>
-              {campaign.priority && !campaign.finished && !campaign.expired && (
-                <>
-                  <p className="muted">
-                    {t(`reason_${campaign.priority.reason}`)}
-                    {campaign.priority.deadline && ` · ${dateTime(campaign.priority.deadline)}`}
-                  </p>
-                  {!!campaign.priority.target_ids.length && (
-                    <div className="flex flex-wrap gap-x-2 gap-y-1 text-[13px]">
-                      <span className="text-muted">{t('priority_targets')}</span>
-                      {campaign.priority.target_ids.map((id) => {
-                        const target = campaign.drops.find((drop) => drop.id === id);
-                        return (
-                          target && (
-                            <button
-                              type="button"
-                              className="text-link"
-                              key={id}
-                              onClick={() => selectDrop(id)}
-                            >
-                              {target.name}
-                            </button>
-                          )
-                        );
-                      })}
-                    </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="muted">
+                  {t(
+                    campaign.linked === true
+                      ? 'account_linked'
+                      : campaign.linked === false
+                        ? 'not_linked_detail'
+                        : 'link_unknown',
                   )}
-                </>
-              )}
-              <div className="flex flex-wrap items-center gap-3">
+                </span>
                 {campaign.linked !== true && safeUrl(campaign.link_url) && (
                   <a
                     className="text-link"
+                    aria-label={t(campaign.linked === null ? 'check_account_link' : 'link_account')}
                     href={safeUrl(campaign.link_url)}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {t(campaign.linked === null ? 'check_account_link' : 'link_account')}
-                  </a>
-                )}
-                {safeUrl(campaign.campaign_url) && (
-                  <a
-                    className="icon-button"
-                    aria-label={t('open_twitch_campaign')}
-                    title={t('open_twitch_campaign')}
-                    href={safeUrl(campaign.campaign_url)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Icon path={mdiOpenInNew} className="mdi-icon" />
+                    {t(campaign.linked === null ? 'check_account_link' : 'connect')}
                   </a>
                 )}
               </div>
+              {!!priority?.target_ids.length && (
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  <span className="text-muted">{t('priority_targets')}</span>
+                  {priority.target_ids.map((id) => {
+                    const target = campaign.drops.find((drop) => drop.id === id);
+                    return (
+                      target && (
+                        <button
+                          type="button"
+                          className="text-link"
+                          key={id}
+                          onClick={() => selectDrop(id)}
+                        >
+                          {target.name}
+                        </button>
+                      )
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="divide-y divide-divider">
               {campaign.drops.map((drop) => {
                 const claim = history?.entries.find((entry) => entry.id === drop.id);
                 const benefits = drop.benefits.filter((benefit) => benefit.name !== drop.name);
+                const eligibility = drop.is_claimed ? 'claimed' : (drop.eligibility ?? 'unknown');
                 const status =
-                  !drop.is_claimed &&
-                  drop.eligibility === 'ready' &&
-                  mining?.campaign_id === campaign.id &&
-                  mining.drop_id === drop.id
-                    ? 'mining_state_watching'
-                    : `eligibility_${drop.is_claimed ? 'claimed' : (drop.eligibility ?? 'unknown')}`;
+                  eligibility === 'ready'
+                    ? mining?.campaign_id === campaign.id && mining.drop_id === drop.id
+                      ? 'mining_state_watching'
+                      : undefined
+                    : `eligibility_${eligibility}`;
                 return (
                   <section
                     id={`drop-${drop.id}`}
@@ -234,16 +237,18 @@ export function CampaignDetail({
                       <Art url={drop.benefits[0]?.image_url} className="size-12" fit="contain" />
                       <div className="min-w-0 flex-1">
                         <h3 className="font-medium">{drop.name}</h3>
-                        <p className="muted mt-1">
-                          {drop.is_claimed &&
-                            claim?.claimed_at_is_observed &&
-                            `${t('eligibility_claimed')} · `}
-                          {drop.is_claimed && claim
-                            ? t(claim.claimed_at_is_observed ? 'first_observed' : 'claimed_at', {
-                                time: dateTime(claim.claimed_at),
-                              })
-                            : t(status)}
-                        </p>
+                        {status && (
+                          <p className="muted mt-1">
+                            {drop.is_claimed &&
+                              claim?.claimed_at_is_observed &&
+                              `${t('eligibility_claimed')} · `}
+                            {drop.is_claimed && claim
+                              ? t(claim.claimed_at_is_observed ? 'first_observed' : 'claimed_at', {
+                                  time: dateTime(claim.claimed_at),
+                                })
+                              : t(status)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {!!benefits.length && (
