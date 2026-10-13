@@ -475,7 +475,7 @@ export default function Mining({ upNext }: { upNext: ReturnType<typeof useUpNext
           <div
             id="up-next-list"
             data-restore-scroll
-            className="scroll-list min-h-0 max-h-[440px] overflow-y-auto focus-visible:bg-field xl:max-h-none xl:flex-1"
+            className="scroll-list min-h-0 max-h-[440px] scroll-pt-20 overflow-y-auto focus-visible:bg-field xl:max-h-none xl:flex-1"
             role="region"
             aria-labelledby="up-next-heading"
             tabIndex={0}

@@ -173,12 +173,8 @@ test('Up next aligns a single reward window with its campaign and wraps long nam
     const date = campaign.locator('..').getByText(/^Ends:/);
     const nameBox = (await campaign.boundingBox())!;
     const dateBox = (await date.boundingBox())!;
-    if (width >= 390) {
-      expect(Math.abs(nameBox.y - dateBox.y)).toBeLessThan(4);
-      expect(dateBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
-    } else {
-      expect(dateBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height);
-    }
+    expect(Math.abs(nameBox.y - dateBox.y)).toBeLessThan(4);
+    expect(dateBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
     await expect(queue.locator('li').getByText(/^Ends:/)).toHaveCount(0);
     const toggle = queue.getByRole('button', { name: 'Rainbow Six Siege', exact: true });
     expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -198,6 +194,13 @@ test('Up next aligns a single reward window with its campaign and wraps long nam
   await expect(page.locator('#up-next-campaign-campaign-1')).toHaveText(
     games[0]!.campaigns[0]!.name,
   );
+  const longName = page.locator('#up-next-campaign-campaign-1');
+  const nameBox = (await longName.boundingBox())!;
+  const dateBox = (await longName
+    .locator('..')
+    .getByText(/^Ends:/)
+    .boundingBox())!;
+  expect(dateBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   expect(
     await page.locator('#up-next-list').evaluate((el) => el.scrollWidth <= el.clientWidth),
@@ -224,4 +227,82 @@ test('completed watch time remains unclaimed in campaign details with one connec
   );
   await expect(detail.getByText('Game account not linked', { exact: true })).toBeVisible();
   await expect(detail.getByText(/waiting for claim confirmation/)).toHaveCount(0);
+});
+
+test('long queues use compact headers and reward columns while retaining context and keyboard access', async ({
+  page,
+  request,
+}) => {
+  const games = [
+    game(1, 'Escape from Tarkov'),
+    game(2, 'Out of the Park Baseball 27'),
+    game(3, 'Rainbow Six Siege'),
+  ];
+  for (const [index, entry] of games.entries()) {
+    const campaign = entry.campaigns[0]!;
+    campaign.name = ['EXFIL Brothers Day 5', 'Affiliate10/13/26', 'R6S S2 2026 17'][index]!;
+    campaign.priority = { reason: 'short_event', deadline: '2026-10-14T06:59:00Z', target_ids: [] };
+    campaign.drops = Array.from({ length: [6, 16, 4][index]! }, (_, position) => ({
+      ...campaign.drops[0]!,
+      id: `reward-${position + 1}`,
+      name: `Drop ${position + 5}`,
+      benefits: [
+        index === 0
+          ? ['Legendary 1', 'Common 3', 'Rare 3', 'Common 4', 'Rare 4', 'Legendary 2'][position]!
+          : `Standard Pack ${position + 1}`,
+      ],
+      eligibility: 'ready',
+      ends_at: '2026-10-14T06:59:00Z',
+    }));
+  }
+  await publish(request, games);
+  for (const width of [1920, 1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    const queue = page.getByRole('region', { name: 'Up next', exact: true });
+    const first = queue.getByRole('button', { name: 'Escape from Tarkov', exact: true });
+    const second = queue.getByRole('button', { name: 'Out of the Park Baseball 27', exact: true });
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await expect(first.getByText('6 rewards', { exact: true })).toBeVisible();
+    await expect(queue.getByText(/^Saved #/).first()).not.toBeInViewport();
+    const campaignLink = queue.getByRole('link', { name: 'EXFIL Brothers Day 5', exact: true });
+    await expect(campaignLink).toHaveAttribute('title', /^Short event first:/);
+    await expect(queue.getByText(/^Short event first/)).toHaveCount(0);
+    const rewards = queue.locator('li:visible');
+    const a = (await rewards.nth(0).boundingBox())!;
+    const b = (await rewards.nth(1).boundingBox())!;
+    if (width >= 1440) {
+      expect(b.y).toBeCloseTo(a.y, 0);
+      expect(b.x).toBeGreaterThan(a.x + a.width);
+    } else {
+      expect(b.y).toBeGreaterThan(a.y + a.height);
+      expect(b.x).toBeCloseTo(a.x, 0);
+    }
+    await page
+      .locator('section')
+      .filter({ has: queue })
+      .screenshot({ path: `../artifacts/up-next-clean-${width}.png` });
+    await second.click();
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await expect(second).toHaveAttribute('aria-expanded', 'true');
+    await queue.evaluate((element) => {
+      element.scrollTop = 100;
+    });
+    await expect
+      .poll(async () => (await first.boundingBox())!.y - (await queue.boundingBox())!.y)
+      .toBeCloseTo(0, 0);
+    const rewardLink = queue.locator('#up-next-drop-campaign-1-reward-1');
+    await rewardLink.focus();
+    await expect(rewardLink).toBeFocused();
+    await expect
+      .poll(async () => {
+        const header = (await first.boundingBox())!;
+        return (await rewardLink.boundingBox())!.y >= header.y + header.height;
+      })
+      .toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    expect(await queue.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+  }
 });

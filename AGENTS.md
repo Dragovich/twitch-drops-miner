@@ -561,8 +561,13 @@ embed it and run without a build tool/runtime companion. Production builds never
   subtitle when a reward is shown. Keep unknown evidence unchanged; never display estimates as
   confirmed minutes or invent a confirmation timestamp or a duration for an unknown reward.
   Channels, Up next and game-priority rows have inset separators and modest 4px scrollbar
-  padding, smaller than Campaigns. Up next groups collapse independently, with reward counts
-  and the nearest deadline visible when collapsed. Expand the first game initially and whenever
+  padding, smaller than Campaigns. Up next groups collapse independently. Compact game headers
+  show artwork, name, reward count and a chevron; keep saved order and nearest deadline in the
+  header tooltip and accessible description. Pin each game's header within its own group while
+  scrolling, with bounded name wrapping and scroll padding for keyboard focus. Use a responsive
+  reward grid without nested cards, retaining one column on phones. Keep priority explanations
+  in the campaign link tooltip and full campaign details, without repeating the deadline below it.
+  Expand the first game initially and whenever
   a different game becomes first; retain manual choices while it stays first and across campaign
   navigation. Keep this UI state in memory, keyed by game identity and scoped to the account and
   runtime instance, pruning removed games. Do not change saved priorities or move keyboard focus.
