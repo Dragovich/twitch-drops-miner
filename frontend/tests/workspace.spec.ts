@@ -410,9 +410,7 @@ test('simplified captions and settings retain progress, recovery and refresh con
       data: { ...fixture, mining: { ...mining, state: 'awaiting_claim' }, activity },
     },
   });
-  await expect(
-    page.getByText('Watch time complete; waiting for claim confirmation', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText('Watch time complete', { exact: true })).toBeVisible();
   await page.goto('/campaigns?tab=history');
   await expect(page.getByRole('button', { name: 'Refresh inventory', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Refresh inventory', exact: true }).click();
