@@ -880,7 +880,12 @@ pub fn wanted_items(
         let mut ordered: Vec<_> = campaign
             .drops
             .iter()
-            .filter(|d| d.watch_reward() && now < d.ends_at && policy.mineable.contains(&d.id))
+            .filter(|d| {
+                d.watch_reward()
+                    && d.confirmed_minutes < d.required_minutes
+                    && now < d.ends_at
+                    && policy.mineable.contains(&d.id)
+            })
             .collect();
         ordered.sort_by_key(|d| {
             let deadline = deadlines.get(&d.id).map(|priority| priority.deadline);
@@ -1721,6 +1726,40 @@ mod tests {
         assert!(drops.iter().all(|d| d.image_url.ends_with("reward.png")));
         let empty = campaign(vec![]);
         assert!(!empty.view(&settings, now()).finished);
+    }
+
+    #[test]
+    fn queue_omits_confirmed_watch_completion_without_claiming_or_unlocking_rewards() {
+        let mut c = campaign(vec![
+            raw_drop("complete", &[]),
+            raw_drop("claimed", &[]),
+            raw_drop("estimated", &[]),
+            raw_drop("successor", &["complete"]),
+        ]);
+        c.drops[0].confirm(60, now());
+        c.drops[0].claim_id = Some("instance".into());
+        c.drops[1].mark_claimed(now());
+        c.drops[2].confirm(59, now());
+        c.drops[2].estimated_minutes = 1;
+
+        let queue = wanted_items(std::slice::from_ref(&c), &selected(), now());
+        assert_eq!(
+            queue[0].campaigns[0]
+                .drops
+                .iter()
+                .map(|d| d.id.as_str())
+                .collect::<Vec<_>>(),
+            ["estimated", "successor"]
+        );
+        assert_eq!(
+            queue[0].campaigns[0].drops[1].eligibility,
+            Eligibility::Prerequisite
+        );
+        assert!(!c.drops[0].claimed);
+        assert!(c.drops[0].can_claim(c.ends_at, now()));
+        assert!(c.needs_claim_refresh(now()));
+        assert!(!c.prerequisites_met(&c.drops[3]));
+        assert!(!c.view(&selected(), now()).finished);
     }
 
     #[test]

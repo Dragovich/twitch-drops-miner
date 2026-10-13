@@ -30,6 +30,7 @@ import { MinerProvider, useMiner } from './MinerProvider';
 import { miningTitle } from './title';
 import { Button, Empty, Notice, IconButton } from '../shared/ui/index';
 import Mining from '../features/mining/Mining';
+import { useUpNextState } from '../features/mining/UpNext';
 import Campaigns from '../features/campaigns/Campaigns';
 import Activity from '../features/activity/Activity';
 import Settings from '../features/settings/Settings';
@@ -38,6 +39,7 @@ import Login from '../features/settings/Login';
 import logo from '../assets/twitch-drops-miner-logo.svg?no-inline';
 function Shell({ auth, onLogout }: { auth: AuthStatus; onLogout: () => Promise<void> }) {
   const { data, connected, incompatible, autosave } = useMiner();
+  const upNext = useUpNextState(data);
   const t = useT();
   const title = miningTitle(data, connected, t);
   useEffect(() => {
@@ -203,7 +205,7 @@ function Shell({ auth, onLogout }: { auth: AuthStatus; onLogout: () => Promise<v
             </Notice>
           )}
           <Routes>
-            <Route path="/" element={<Mining />} />
+            <Route path="/" element={<Mining upNext={upNext} />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/history" element={<Navigate to="/campaigns?tab=history" replace />} />
             <Route path="/activity" element={<Activity />} />
