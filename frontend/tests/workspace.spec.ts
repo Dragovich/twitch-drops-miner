@@ -198,9 +198,10 @@ test('only the game list scrolls while desktop preferences controls stay in plac
     await list.focus();
     await page.keyboard.press('PageDown');
     await expect(list).toHaveCSS('background-color', 'rgb(36, 36, 36)');
+    await expect(list).toHaveCSS('border-top-width', '1px');
     await expect(list.getByRole('list', { name: 'Game priorities', exact: true })).toHaveCSS(
-      'background-color',
-      'rgb(36, 36, 36)',
+      'border-top-width',
+      '0px',
     );
     await list.hover();
     await page.mouse.wheel(0, 350);
@@ -1054,7 +1055,7 @@ test('campaign panes fill the height below full-width controls and keep row hove
     const browser = (await page.locator('.campaign-browser').boundingBox())!;
     expect(browser.width).toBeCloseTo(bounds.width, 0);
     expect(browser.width * 2 + 12).toBeCloseTo(columns.width, 0);
-    await expect(list).toHaveCSS('padding-inline-end', '1px');
+    await expect(list).toHaveCSS('padding-inline-end', '0px');
     const card = (await first.locator('..').boundingBox())!;
     const visibleGap = bounds.x - card.x - card.width;
     expect(visibleGap).toBeGreaterThanOrEqual(12);
@@ -1297,7 +1298,12 @@ test('mobile campaign details lock background scrolling and restore the list', a
         const target = page.getByRole('button', { name: 'Open Campaign 15', exact: true });
         await target.scrollIntoViewIfNeeded();
         const before = await page.evaluate(() => window.scrollY);
-        expect(before).toBeGreaterThan(0);
+        const results = page.getByRole('region', {
+          name: history ? 'History' : 'Campaigns',
+          exact: true,
+        });
+        const listBefore = await results.evaluate((element) => element.scrollTop);
+        expect(view === 'list' ? listBefore : before).toBeGreaterThan(0);
         await target.click();
         const detail = page.getByRole('complementary', { name: 'Campaign details' });
         const body = detail.locator('.detail-body');
@@ -1326,9 +1332,16 @@ test('mobile campaign details lock background scrolling and restore the list', a
         await expect(page.locator('html')).toHaveCSS('overflow-y', 'visible');
         await expect(target).toBeFocused();
         expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(before, 0);
+        expect(await results.evaluate((element) => element.scrollTop)).toBeCloseTo(listBefore, 0);
         await target.hover();
         await page.mouse.wheel(0, -250);
-        await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(before);
+        await expect
+          .poll(() =>
+            view === 'list'
+              ? results.evaluate((element) => element.scrollTop)
+              : page.evaluate(() => window.scrollY),
+          )
+          .toBeLessThan(view === 'list' ? listBefore : before);
       }
     }
   }
