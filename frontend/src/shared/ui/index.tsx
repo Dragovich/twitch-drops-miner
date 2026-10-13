@@ -26,7 +26,7 @@ export function IconButton({
   label,
   className = '',
   ...props
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & { path: string; label: string }) {
+}: Omit<ComponentProps<'button'>, 'children'> & { path: string; label: string }) {
   return (
     <button
       type="button"

@@ -743,8 +743,14 @@ for (const width of [1440, 320]) {
     await expect(timer).toBeVisible();
     const buttonBox = (await back.boundingBox())!;
     const timerBox = (await timer.boundingBox())!;
-    expect(buttonBox.y + buttonBox.height / 2).toBeCloseTo(timerBox.y + timerBox.height / 2, 0);
-    expect(buttonBox.x + buttonBox.width).toBeLessThan(timerBox.x);
+    expect(timerBox.x + timerBox.width).toBeLessThan(buttonBox.x);
+    const header = card.locator(':scope > div').first();
+    await expect(header.getByText('Manual selection', { exact: true })).toBeVisible();
+    await expect(header.getByRole('button', { name: 'Return to Auto Mode' })).toBeVisible();
+    expect(timerBox.y + timerBox.height).toBeLessThan((await identity.boundingBox())!.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
     if (width < 768) expect(buttonBox.height).toBeGreaterThanOrEqual(44);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await card.screenshot({ path: `../artifacts/now-mining-manual-${width}.png` });
@@ -2090,6 +2096,7 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
   request,
 }) => {
   await request.post('/api/settings', { headers, data: { games_to_watch: ['Other game'] } });
+  await page.setViewportSize({ width: 1440, height: 420 });
   await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
   const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
   const mine = page.getByRole('button', { name: 'Mine', exact: true });
@@ -2103,7 +2110,8 @@ test('manual channel entry accepts a URL and optional timer without selecting ga
   await input.fill('missing');
   await mine.click();
   await expect(page.getByRole('alert')).toHaveText('That Twitch channel was not found.');
-  await page.setViewportSize({ width: 1440, height: 420 });
+  await page.getByRole('button', { name: 'Mine channel', exact: true }).click();
+  await expect(input).toHaveValue('missing');
   const panel = page.getByRole('region', { name: 'Channels', exact: true });
   expect((await panel.boundingBox())!.height).toBeGreaterThan(90);
   await input.scrollIntoViewIfNeeded();

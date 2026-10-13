@@ -1,17 +1,13 @@
 import MiningPreferences from './MiningPreferences';
-import SearchPicker from '../../shared/ui/SearchPicker';
-import { useDirectorySearch } from './useDirectorySearch';
-import type { ChannelSearchResult } from '../../shared/lib/types';
+import ChannelPicker from './ChannelPicker';
 import { CampaignLink } from '../campaigns/CampaignLink';
 import { Icon } from '@mdi/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   mdiPencil,
-  mdiReload,
   mdiRefreshAuto,
   mdiPlayCircleOutline,
-  mdiPlus,
   mdiPause,
   mdiPlay,
   mdiChevronLeft,
@@ -30,10 +26,8 @@ import {
   Search,
   Notice,
   useAction,
-  ActionResult,
   dateTime,
   ConfirmedTime,
-  Input,
 } from '../../shared/ui/index';
 export default function Mining() {
   const { data, connected, autosave } = useMiner();
@@ -61,30 +55,8 @@ export default function Mining() {
     channelList.current?.scrollTo({ top: 0 });
     setParams(next, { replace: true });
   }
-  const [channelInput, setChannelInput] = useState('');
-  const [manualMinutes, setManualMinutes] = useState('');
   const [enterChannel, setEnterChannel] = useState(false);
   const action = useAction();
-  const searchTerm = channelInput
-    .trim()
-    .replace(/^https?:\/\/(?:www\.|m\.)?twitch\.tv\/([a-z0-9_]{1,25})\/?$/i, '$1')
-    .replace(/^@/, '');
-  const directory = useDirectorySearch<ChannelSearchResult>(
-    '/api/channels/search',
-    searchTerm.length <= 100 ? searchTerm : '',
-    connected && enterChannel && !edit,
-    data?.login.user_id,
-  );
-  const manualForm = useRef<HTMLFormElement>(null);
-  function mineChannel(channel: string) {
-    if (!manualForm.current?.reportValidity()) return;
-    void action.run(() =>
-      request('/api/channels/select', {
-        channel,
-        duration_minutes: manualMinutes ? Number(manualMinutes) : null,
-      }),
-    );
-  }
   if (!data) return <Empty title={t('loading')} />;
   if (edit) return <MiningPreferences />;
   const progress = data.current_drop;
@@ -131,21 +103,37 @@ export default function Mining() {
         <h1 className="text-[22px] font-semibold">{t('mining')}</h1>
         <InventoryRefreshButton />
       </header>
-      <ActionResult action={action} />
       <section className="panel shrink-0 p-4 md:px-5 md:py-6" aria-labelledby="mining-heading">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:mb-5">
           <h2 id="mining-heading" className="section-title">
             {t(paused ? 'paused' : 'now_mining')}
           </h2>
-          <div className="ms-auto flex items-center gap-3">
+          <div className="ms-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
             {progress?.confirmed_at && (
               <ConfirmedTime
                 value={progress.confirmed_at}
                 className="text-right text-xs text-[#888888]"
               />
             )}
-            {data.manual_mode.active ? (
-              <span className="muted">{t('manual')}</span>
+            {data.manual_mode.active || data.manual_mode.pending_channel ? (
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <span className="muted">{t('manual')}</span>
+                  {data.manual_mode.expires_at && (
+                    <p className="text-xs text-muted">
+                      {t('gui.channels.auto_at', {
+                        time: dateTime(data.manual_mode.expires_at, true),
+                      })}
+                    </p>
+                  )}
+                </div>
+                <IconButton
+                  path={mdiRefreshAuto}
+                  label={t('gui.progress.return_to_auto')}
+                  disabled={!connected || action.busy}
+                  onClick={() => void action.run(() => request('/api/mode/exit-manual', {}))}
+                />
+              </div>
             ) : (
               <span
                 role="img"
@@ -266,25 +254,6 @@ export default function Mining() {
             </Link>
           </Empty>
         )}
-        {(data.manual_mode.active ||
-          data.manual_mode.pending_channel ||
-          data.manual_mode.expires_at) && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            {(data.manual_mode.active || data.manual_mode.pending_channel) && (
-              <IconButton
-                path={mdiRefreshAuto}
-                label={t('gui.progress.return_to_auto')}
-                disabled={!connected || action.busy}
-                onClick={() => void action.run(() => request('/api/mode/exit-manual', {}))}
-              />
-            )}
-            {data.manual_mode.expires_at && (
-              <p className="muted">
-                {t('gui.channels.auto_at', { time: dateTime(data.manual_mode.expires_at) })}
-              </p>
-            )}
-          </div>
-        )}
       </section>
       {/* Long lists must not contribute to the page's intrinsic minimum height. */}
       <div className="grid gap-5 xl:min-h-[260px] xl:grid-cols-2 xl:flex-1 xl:[contain:size]">
@@ -315,12 +284,7 @@ export default function Mining() {
                     />
                   </nav>
                 )}
-                <IconButton
-                  path={mdiPlus}
-                  label={t('gui.channels.mine_channel')}
-                  aria-expanded={enterChannel}
-                  onClick={() => setEnterChannel(!enterChannel)}
-                />
+                <ChannelPicker open={enterChannel} onOpenChange={setEnterChannel} action={action} />
               </div>
             </div>
             <Search value={search} onChange={setSearch} label={t('search_channels')} />
@@ -334,84 +298,9 @@ export default function Mining() {
             aria-labelledby="channels-heading"
             tabIndex={0}
           >
-            {(enterChannel || data.manual_mode.error) && (
-              <div className="mx-4 space-y-3 border-b border-divider py-4">
-                {enterChannel && (
-                  <form
-                    ref={manualForm}
-                    className="space-y-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      mineChannel(channelInput);
-                    }}
-                  >
-                    <SearchPicker
-                      label={t('gui.channels.channel_input')}
-                      actionLabel={t('mine')}
-                      actionIcon={mdiPlayCircleOutline}
-                      submit
-                      busy={action.busy || !!data.manual_mode.pending_channel}
-                      roundImages
-                      maxLength={256}
-                      value={channelInput}
-                      onChange={setChannelInput}
-                      options={directory.items.map((channel) => ({
-                        id: channel.login,
-                        name: channel.name,
-                        image: channel.avatar_url,
-                        description: `@${channel.login}, ${t(channel.online ? 'gui.channels.live' : 'gui.channels.offline')}${channel.online && channel.game ? `, ${channel.game}` : ''}`,
-                      }))}
-                      onSelect={(channel) => {
-                        setChannelInput(channel.id);
-                        mineChannel(channel.id);
-                      }}
-                      onResolve={() => mineChannel(channelInput)}
-                      disabled={
-                        !connected ||
-                        !data.login.user_id ||
-                        action.busy ||
-                        !!data.manual_mode.pending_channel
-                      }
-                      loading={directory.loading}
-                      ready={directory.complete || directory.loading}
-                    >
-                      {directory.loading && (
-                        <p role="status" className="muted px-3 py-2">
-                          {t('loading')}
-                        </p>
-                      )}
-                      {directory.complete && !directory.error && !directory.items.length && (
-                        <p role="status" className="muted px-3 py-2">
-                          {t('gui.channels.search_empty')}
-                        </p>
-                      )}
-                      {directory.error && (
-                        <div
-                          role="status"
-                          className="flex items-center gap-2 px-3 py-2 text-[13px] text-muted"
-                        >
-                          <span>{t('gui.channels.search_failed')}</span>
-                          <IconButton
-                            path={mdiReload}
-                            label={t('retry')}
-                            onClick={directory.retry}
-                          />
-                        </div>
-                      )}
-                    </SearchPicker>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1440}
-                      step={1}
-                      aria-label={t('gui.channels.manual_timer')}
-                      placeholder={t('gui.channels.manual_timer')}
-                      value={manualMinutes}
-                      onChange={(event) => setManualMinutes(event.target.value)}
-                    />
-                  </form>
-                )}
-                {data.manual_mode.error && <Notice error>{data.manual_mode.error}</Notice>}
+            {(action.error || data.manual_mode.error) && (
+              <div className={`p-4 ${enterChannel ? 'invisible' : ''}`} aria-hidden={enterChannel}>
+                <Notice error>{action.error || data.manual_mode.error}</Notice>
               </div>
             )}
             {channels.slice(channelPage * 25, (channelPage + 1) * 25).map((channel) => (

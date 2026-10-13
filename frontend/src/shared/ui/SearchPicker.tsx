@@ -10,6 +10,7 @@ export default function SearchPicker<T extends SearchOption>({
   submit = false,
   busy = false,
   roundImages = false,
+  inline = false,
   maxLength,
   value,
   onChange,
@@ -27,6 +28,7 @@ export default function SearchPicker<T extends SearchOption>({
   submit?: boolean;
   busy?: boolean;
   roundImages?: boolean;
+  inline?: boolean;
   maxLength?: number;
   value: string;
   onChange: (value: string) => void;
@@ -45,7 +47,7 @@ export default function SearchPicker<T extends SearchOption>({
   const [nativePopover] = useState(() => typeof HTMLElement.prototype.showPopover === 'function');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<{ query: string; id: string } | null>(null);
-  const visible = open && !!value.trim() && ready && !disabled;
+  const visible = (inline || open) && !!value.trim() && ready && !disabled;
   const activeIndex =
     active?.query === value ? options.findIndex((option) => option.id === active.id) : -1;
 
@@ -73,10 +75,11 @@ export default function SearchPicker<T extends SearchOption>({
 
   useLayoutEffect(() => {
     // Save-status banners can move the field without resizing it.
-    if (visible) position();
+    if (visible && !inline) position();
   });
 
   useLayoutEffect(() => {
+    if (inline) return;
     const element = popup.current!;
     const anchor = input.current!;
     if (!visible) {
@@ -109,7 +112,7 @@ export default function SearchPicker<T extends SearchOption>({
       window.visualViewport?.removeEventListener('resize', position);
       window.visualViewport?.removeEventListener('scroll', position);
     };
-  }, [visible, disabled, nativePopover]);
+  }, [visible, disabled, nativePopover, inline]);
 
   useLayoutEffect(() => {
     if (visible && activeIndex >= 0)
@@ -126,8 +129,13 @@ export default function SearchPicker<T extends SearchOption>({
   return (
     <div
       ref={picker}
-      className="flex min-w-0 flex-1 gap-2 max-md:basis-full"
+      className={
+        inline
+          ? 'grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)] gap-2'
+          : 'flex min-w-0 flex-1 gap-2 max-md:basis-full'
+      }
       onKeyDownCapture={(event) => {
+        if (inline) return;
         if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
         event.preventDefault();
         event.stopPropagation();
@@ -200,10 +208,10 @@ export default function SearchPicker<T extends SearchOption>({
       />
       <div
         ref={popup}
-        popover={nativePopover ? 'auto' : undefined}
-        hidden={!nativePopover && !visible}
-        data-fallback-open={!nativePopover && visible ? true : undefined}
-        className="search-popover"
+        popover={!inline && nativePopover ? 'auto' : undefined}
+        hidden={(inline || !nativePopover) && !visible}
+        data-fallback-open={!inline && !nativePopover && visible ? true : undefined}
+        className={inline ? 'col-span-2 flex min-h-0 flex-col overflow-hidden' : 'search-popover'}
         onClickCapture={() => input.current?.focus({ preventScroll: true })}
         onBeforeToggle={(event) => {
           if (event.newState === 'closed' && visible) {
