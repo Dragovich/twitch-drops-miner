@@ -444,7 +444,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   Games retains saved multi-selection and has one scrolling checklist below its search.
   History shows Games only. Bound both overlays to the viewport, support older webviews,
   and retain keyboard access, outside dismissal and Escape focus return.
-  Hide selected games defaults true when absent and affects Available display only, using
+  Hide selected games defaults false when absent and affects Available display only, using
   the same folded game selection as Mine. Remember the filter, preserve History and direct
   detail links, and recover focus/pagination when selecting a game removes its cards.
   Icon-only actions use borderless transparent buttons with circular hover/keyboard backgrounds,

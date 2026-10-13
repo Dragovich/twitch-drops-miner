@@ -72,7 +72,7 @@ impl Default for Filters {
             show_expired: false,
             show_finished: false,
             show_only_not_linked: false,
-            hide_selected_games: true,
+            hide_selected_games: false,
             show_benefit_badge: true,
             show_benefit_emote: true,
             show_benefit_item: true,
@@ -416,19 +416,22 @@ mod tests {
     }
 
     #[test]
-    fn hide_selected_games_defaults_on_and_preserves_explicit_choices() {
+    fn hide_selected_games_defaults_off_and_preserves_explicit_choices() {
+        assert!(!Settings::default().inventory_filters.hide_selected_games);
         let old = Settings::from_saved(json!({"games_to_watch":["Rust"],
             "inventory_filters":{"show_upcoming":false}}))
         .unwrap();
-        assert!(old.inventory_filters.hide_selected_games);
+        assert!(!old.inventory_filters.hide_selected_games);
         assert!(!old.inventory_filters.show_upcoming);
-        let visible = old
-            .patched(&json!({"inventory_filters":{"hide_selected_games":false}}))
-            .unwrap();
-        let restored = Settings::from_saved(serde_json::to_value(&visible).unwrap()).unwrap();
-        assert!(!restored.inventory_filters.hide_selected_games);
-        assert!(!restored.inventory_filters.show_upcoming);
-        assert_eq!(restored.games_to_watch, ["Rust"]);
+        for enabled in [true, false] {
+            let saved = old
+                .patched(&json!({"inventory_filters":{"hide_selected_games":enabled}}))
+                .unwrap();
+            let restored = Settings::from_saved(serde_json::to_value(&saved).unwrap()).unwrap();
+            assert_eq!(restored.inventory_filters.hide_selected_games, enabled);
+            assert!(!restored.inventory_filters.show_upcoming);
+            assert_eq!(restored.games_to_watch, ["Rust"]);
+        }
         assert!(
             old.patched(&json!({"inventory_filters":{"hide_selected_games":"true"}}))
                 .is_err()
