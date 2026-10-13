@@ -440,7 +440,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.
 - Keep the subtle charcoal/Manrope design, individual `@mdi/js` paths rendered with `@mdi/react`, and shared native controls.
-  Do not use middle-dot (U+00B7) separators in authored UI text or documentation.
+  Do not use middle-dot (U+00B7) separators in authored UI text or documentation,
+  except the README's Quick start / Dashboard / Updating / Troubleshooting navigation.
   Use wording, commas, colons or parentheses instead.
   Icon-only actions use borderless transparent buttons with circular hover/keyboard backgrounds,
   accessible names and tooltips.

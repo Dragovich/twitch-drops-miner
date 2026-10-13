@@ -15,7 +15,7 @@ claims your drops. It runs on your own hardware with one Twitch account per inst
 
 ![Drops Miner dashboard with a Twitch profile and badge, Fortnite reward progress, channels and queued campaigns](.github/assets/dashboard-mining.png)
 
-[Quick start](#quick-start) | [Dashboard](#using-the-dashboard) | [Updating](#updating) | [Troubleshooting](#troubleshooting)
+[Quick start](#quick-start) · [Dashboard](#using-the-dashboard) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
 > [!NOTE]
 > This is a personal project for use on your own hardware and home network. VPS/cloud
