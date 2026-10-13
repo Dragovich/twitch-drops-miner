@@ -7,6 +7,76 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__test/reset', { headers, data: {} });
 });
 
+test.describe('phone game filters', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  for (const [search, fallback] of [
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ] as const) {
+    test(`All games works on the first tap (search ${search}, fallback ${fallback})`, async ({
+      page,
+      request,
+    }) => {
+      if (fallback)
+        await page.addInitScript(() => {
+          delete (HTMLElement.prototype as Partial<HTMLElement>).showPopover;
+          delete (HTMLElement.prototype as Partial<HTMLElement>).hidePopover;
+        });
+      const campaigns = Array.from({ length: 40 }, (_, index) => ({
+        ...fixture.campaigns[0]!,
+        id: `campaign-${index}`,
+        name: `Campaign ${index}`,
+        game_name: `Game ${String(index).padStart(2, '0')}`,
+      }));
+      await request.post('/__test/event', {
+        headers,
+        data: { event: 'inventory_batch_update', data: { campaigns } },
+      });
+      await page.goto('/campaigns');
+      await page.getByRole('button', { name: 'Games', exact: true }).tap();
+      const popup = page.getByRole('group', { name: 'Games', exact: true });
+      if (search) {
+        await popup.getByRole('searchbox').tap();
+        await popup.getByRole('searchbox').fill('Game 0');
+      }
+      await popup.getByRole('checkbox', { name: 'Game 00', exact: true }).tap();
+      await popup.getByRole('checkbox', { name: 'Game 01', exact: true }).tap();
+      await expect(popup.getByRole('checkbox', { checked: true })).toHaveCount(2);
+      await expect
+        .poll(
+          async () =>
+            (await (await request.get('/api/settings')).json()).inventory_filters.game_name_search,
+        )
+        .toEqual(['Game 00', 'Game 01']);
+      await popup.getByRole('button', { name: 'All games', exact: true }).tap();
+      await expect(popup).toBeVisible();
+      await expect(popup.getByRole('checkbox', { checked: true })).toHaveCount(0);
+      await expect(popup.getByRole('button', { name: 'All games', exact: true })).toBeDisabled();
+      await expect
+        .poll(
+          async () =>
+            (await (await request.get('/api/settings')).json()).inventory_filters.game_name_search,
+        )
+        .toEqual([]);
+      await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).tap();
+      await expect(popup).toBeHidden();
+      await page.getByRole('button', { name: 'Filters', exact: true }).tap();
+      const filters = page.getByRole('group', { name: 'Filters', exact: true });
+      await filters.getByRole('checkbox', { name: 'Hide selected games' }).tap();
+      await filters.getByRole('button', { name: 'Clear filters', exact: true }).tap();
+      await expect(filters).toBeVisible();
+      await expect(
+        filters.getByRole('checkbox', { name: 'Hide selected games' }),
+      ).not.toBeChecked();
+      await page.getByRole('searchbox', { name: 'Search campaigns and rewards' }).focus();
+      await expect(filters).toBeHidden();
+    });
+  }
+});
+
 for (const [width, height, fallback] of [
   [1440, 900, false],
   [1280, 360, false],

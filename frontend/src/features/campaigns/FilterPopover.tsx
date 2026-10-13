@@ -122,6 +122,7 @@ export default function FilterPopover({
         id={id}
         role="group"
         aria-label={label}
+        tabIndex={-1}
         popover={native ? 'manual' : undefined}
         hidden={!open}
         className="campaign-popover panel fixed z-50 m-0 flex flex-col overflow-hidden shadow-lg"
