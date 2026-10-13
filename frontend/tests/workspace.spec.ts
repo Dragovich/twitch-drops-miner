@@ -1,6 +1,7 @@
 import { test, expect, type WebSocketRoute } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fixture from './fixture.json' with { type: 'json' };
+import type { Snapshot } from '../src/shared/lib/types';
 
 const headers = { 'X-TDM-Request': '1' };
 test.beforeEach(async ({ request }) => {
@@ -464,6 +465,87 @@ test('simplified captions and settings retain progress, recovery and refresh con
       });
     }
   }
+});
+
+test('campaign details distinguish active mining from reward eligibility', async ({
+  page,
+  request,
+}) => {
+  const data = structuredClone(fixture) as Snapshot;
+  data.campaigns[0]!.drops[1]!.eligibility = 'ready';
+  data.campaigns.push({ ...structuredClone(data.campaigns[0]!), id: 'campaign-2' });
+  const mining = data.mining!;
+  async function publish() {
+    expect(
+      (
+        await request.post('/__test/event', {
+          headers,
+          data: { event: 'initial_state', data },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  await publish();
+  await page.goto('/campaigns?campaign=campaign-1');
+  const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  const first = detail.locator('#drop-reward-1');
+  const second = detail.locator('#drop-reward-2');
+  const activeLabel = detail.getByText('Mining', { exact: true });
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  await expect(first.getByText('Ready to mine', { exact: true })).toHaveCount(0);
+  await expect(second.getByText('Ready to mine', { exact: true })).toBeVisible();
+  for (const state of ['awaiting_progress', 'manual_watching'] as const) {
+    mining.state = state;
+    await publish();
+    await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  }
+  mining.drop_id = 'reward-2';
+  await publish();
+  await expect(second.getByText('Mining', { exact: true })).toBeVisible();
+  await expect(first.getByText('Ready to mine', { exact: true })).toBeVisible();
+  await page.goto('/campaigns?campaign=campaign-2');
+  await expect(activeLabel).toHaveCount(0);
+  mining.campaign_id = 'campaign-2';
+  mining.drop_id = 'reward-1';
+  mining.state = 'watching';
+  await publish();
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  data.settings.mining_paused = true;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  data.settings.mining_paused = false;
+  for (const state of ['paused', 'waiting_channel', 'manual_offline', 'discovering'] as const) {
+    mining.state = state;
+    await publish();
+    await expect(activeLabel).toHaveCount(0);
+  }
+  mining.state = 'watching';
+  data.login.user_id = null;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  data.login.user_id = fixture.login.user_id;
+  mining.drop_id = null;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  mining.drop_id = 'reward-1';
+  const reward = data.campaigns[1]!.drops[0]!;
+  for (const eligibility of ['awaiting_claim', 'claimed', 'prerequisite'] as const) {
+    reward.eligibility = eligibility;
+    reward.is_claimed = eligibility === 'claimed';
+    await publish();
+    await expect(activeLabel).toHaveCount(0);
+  }
+  reward.eligibility = 'ready';
+  await publish();
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  try {
+    await page.context().setOffline(true);
+    await expect(activeLabel).toHaveCount(0);
+  } finally {
+    await page.context().setOffline(false);
+  }
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
 test('campaign details show shared dates once and preserve distinct reward windows', async ({

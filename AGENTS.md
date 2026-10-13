@@ -614,6 +614,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   Omit per-reward progress confirmation timestamps. Rewards with the backend's watch-complete
   status show that status without a progress bar or minute count; keep unfinished/unknown
   progress and actual claim timestamps. Watch completion never implies a claim.
+  Show Mining instead of Ready to mine only for the active eligible reward, matching both
+  campaign and reward IDs from mining status. Require a connected, logged-in, unpaused watch
+  state; retained progress, idle/offline states and History must never imply active mining.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games

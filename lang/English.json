@@ -377,6 +377,7 @@
             "mining_state_account_required": "Connect your Twitch account",
             "mining_state_no_selection": "Choose games to mine",
             "mining_state_discovering": "Checking inventory",
+            "mining_state_watching": "Mining",
             "mining_state_awaiting_claim": "Watch time complete",
             "mining_state_awaiting_progress": "No confirmed progress yet",
             "mining_state_waiting_channel": "Waiting for an eligible live channel",

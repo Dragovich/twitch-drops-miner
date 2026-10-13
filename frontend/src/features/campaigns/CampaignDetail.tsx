@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Icon } from '@mdi/react';
 import { mdiClose, mdiOpenInNew, mdiReload } from '@mdi/js';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { useMiner } from '../../app/MinerProvider';
 import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
 import { safeUrl } from '../../shared/lib/api';
@@ -24,6 +25,14 @@ export function CampaignDetail({
   retryHistory: () => void;
 }) {
   const campaign = historyOnly ? undefined : liveCampaign;
+  const { data, connected } = useMiner();
+  const mining =
+    connected &&
+    data?.login.user_id &&
+    !data.settings.mining_paused &&
+    ['watching', 'awaiting_progress', 'manual_watching'].includes(data.mining?.state ?? '')
+      ? data.mining
+      : undefined;
   const t = useT();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -207,6 +216,13 @@ export function CampaignDetail({
               {campaign.drops.map((drop) => {
                 const claim = history?.entries.find((entry) => entry.id === drop.id);
                 const benefits = drop.benefits.filter((benefit) => benefit.name !== drop.name);
+                const status =
+                  !drop.is_claimed &&
+                  drop.eligibility === 'ready' &&
+                  mining?.campaign_id === campaign.id &&
+                  mining.drop_id === drop.id
+                    ? 'mining_state_watching'
+                    : `eligibility_${drop.is_claimed ? 'claimed' : (drop.eligibility ?? 'unknown')}`;
                 return (
                   <section
                     id={`drop-${drop.id}`}
@@ -226,9 +242,7 @@ export function CampaignDetail({
                             ? t(claim.claimed_at_is_observed ? 'first_observed' : 'claimed_at', {
                                 time: dateTime(claim.claimed_at),
                               })
-                            : t(
-                                `eligibility_${drop.is_claimed ? 'claimed' : (drop.eligibility ?? 'unknown')}`,
-                              )}
+                            : t(status)}
                         </p>
                       </div>
                     </div>
