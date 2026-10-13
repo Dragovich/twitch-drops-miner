@@ -215,18 +215,43 @@ test('completed watch time remains unclaimed in campaign details with one connec
   campaign.linked = false;
   campaign.drops[0]!.eligibility = 'awaiting_claim';
   campaign.drops[0]!.current_minutes = campaign.drops[0]!.required_minutes;
+  campaign.drops[0]!.confirmed_minutes = campaign.drops[0]!.required_minutes;
+  campaign.drops[0]!.progress = 1;
   await request.post('/__test/event', {
     headers,
     data: { event: 'initial_state', data: { ...fixture, campaigns: [campaign] } },
   });
   await page.goto('/campaigns?campaign=campaign-1');
   const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  const reward = detail.locator('#drop-reward-1');
   await expect(detail.getByText('Watch time complete', { exact: true })).toBeVisible();
+  await expect(reward.getByRole('progressbar')).toHaveCount(0);
+  await expect(reward.getByText('60 / 60 min', { exact: true })).toHaveCount(0);
+  await expect(detail.getByText(/Confirmed /)).toHaveCount(0);
+  await expect(detail.getByText('0 / 2 claimed', { exact: true })).toBeVisible();
+  await expect(detail.getByText('Waiting for prerequisite claims', { exact: true })).toBeVisible();
   await expect(detail.getByRole('link', { name: 'Connect game account', exact: true })).toHaveCount(
     1,
   );
   await expect(detail.getByText('Game account not linked', { exact: true })).toBeVisible();
   await expect(detail.getByText(/waiting for claim confirmation/)).toHaveCount(0);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: `../artifacts/watch-complete-${width}.png`, fullPage: true });
+  }
+
+  campaign.drops[0]!.eligibility = 'ready';
+  campaign.drops[0]!.confirmed_minutes = 42;
+  await request.post('/__test/event', {
+    headers,
+    data: { event: 'inventory_batch_update', data: { campaigns: [campaign] } },
+  });
+  await expect(reward.getByText('Watch time complete', { exact: true })).toHaveCount(0);
+  await expect(reward.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+  await expect(reward.getByText('42 / 60 min', { exact: true })).toBeVisible();
+  await expect(reward.getByText('60 / 60 min', { exact: true })).toHaveCount(0);
+  await expect(reward.getByText(/Confirmed /)).toHaveCount(0);
 });
 
 test('long queues use compact headers and reward columns while retaining context and keyboard access', async ({

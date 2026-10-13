@@ -6,15 +6,7 @@ import type { Campaign } from '../../shared/lib/types';
 import type { HistoryCampaign } from './History';
 import { safeUrl } from '../../shared/lib/api';
 import { useT } from '../../shared/lib/i18n';
-import {
-  Art,
-  Empty,
-  IconButton,
-  Notice,
-  ProgressBar,
-  dateTime,
-  ConfirmedTime,
-} from '../../shared/ui/index';
+import { Art, Empty, IconButton, Notice, ProgressBar, dateTime } from '../../shared/ui/index';
 
 export function CampaignDetail({
   campaign: liveCampaign,
@@ -245,7 +237,7 @@ export function CampaignDetail({
                         {benefits.map((benefit) => benefit.name).join(', ')}
                       </p>
                     )}
-                    {!drop.is_claimed && (
+                    {!drop.is_claimed && drop.eligibility !== 'awaiting_claim' && (
                       <div className="mt-3 space-y-2">
                         <ProgressBar
                           current={drop.confirmed_at ? (drop.confirmed_minutes ?? 0) : 0}
@@ -263,9 +255,6 @@ export function CampaignDetail({
                             total: drop.required_minutes,
                           })}
                         </p>
-                        {drop.confirmed_at && (
-                          <ConfirmedTime value={drop.confirmed_at} className="muted block" />
-                        )}
                       </div>
                     )}
                     {(Date.parse(drop.effective_starts_at ?? drop.starts_at) !==

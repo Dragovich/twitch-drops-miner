@@ -45,7 +45,13 @@ test('confirmation timestamps keep the full tooltip and add dates only when need
     },
   });
   await page.goto(`/campaigns?campaign=${campaign.id}`);
-  await expect(page.locator(`time[datetime="${confirmed}"]`).first()).toHaveText('Confirmed 14:36');
+  const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  await expect(detail.getByText(/Confirmed /)).toHaveCount(0);
+  await expect(detail.locator('time')).toHaveCount(0);
+  await expect(detail.getByRole('progressbar', { name: 'Explorer jacket' })).toHaveAttribute(
+    'aria-valuenow',
+    '42',
+  );
 });
 
 test('a confirmation gains its date at local midnight without another progress report', async ({
