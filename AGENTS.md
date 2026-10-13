@@ -440,6 +440,25 @@ embed it and run without a build tool/runtime companion. Production builds never
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.
 - Keep the subtle charcoal/Manrope design, individual `@mdi/js` paths rendered with `@mdi/react`, and shared native controls.
+  Campaign Games and Filters use separate button-anchored overlays without moving results.
+  Games retains saved multi-selection and has one scrolling checklist below its search.
+  History shows Games only. Bound both overlays to the viewport, support older webviews,
+  and retain keyboard access, outside dismissal and Escape focus return. Keep touch-button
+  focus inside each overlay so All games and Clear filters work on the first tap.
+  Both action footers have a divider. Keep Games compact; let Filters fit its contents
+  within the available viewport, scrolling its options only when space is limited.
+  Hide selected games defaults false when absent and affects Available display only, using
+  the same folded game selection as Mine. Remember the filter, preserve History and direct
+  detail links, and recover focus/pagination when selecting a game removes its cards.
+  Filters contains Hide selected games and Twitch badges / Twitch emotes / Game items.
+  All reward types selected means no type restriction, including unknown types; none selected
+  means no matches. Narrowed type selections match unclaimed, unexpired watch rewards using
+  core eligibility, independent of mining selection and ignores. Details retain all rewards
+  and prerequisites. Remove retired status, linkage and Other controls; ignore their old saved
+  values and query flags. Preserve existing game/type choices without a settings migration.
+  Do not use middle-dot (U+00B7) separators in authored UI text or documentation,
+  except the README's Quick start / Dashboard / Updating / Troubleshooting navigation.
+  Use wording, commas, colons or parentheses instead.
   Icon-only actions use borderless transparent buttons with circular hover/keyboard backgrounds,
   accessible names and tooltips.
   History pagination uses chevrons beside the page count; channel watch/entry, return-to-auto,
@@ -461,6 +480,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   Mining preferences also contains the global Automatically claim drops checkbox, using shared
   autosave and reconnect handling. Its info popover explains manual claiming on Twitch, claim
   expiry, prerequisites, outstanding claims on re-enable and already-started requests.
+  Show progress percentage defaults off and uses the same saved settings in both wrappers.
+  When enabled, Now mining appends the confirmed percentage in parentheses beside minutes.
+  Share rounding with the window/tray title, never round incomplete progress up to 100%,
+  and omit percentages for unknown progress or invalid watch requirements.
   Render strings as React text, validate external links/artwork, expand Twitch image placeholders.
   No injected HTML or CDN scripts. Art provides safe missing/broken-image fallbacks.
   Reward thumbnails contain their artwork; game covers retain cover sizing. Phone checkbox
@@ -557,8 +580,11 @@ embed it and run without a build tool/runtime companion. Production builds never
   with an unconfirmed tooltip and accessible description. Suppress the redundant awaiting-progress
   subtitle when a reward is shown. Keep unknown evidence unchanged; never display estimates as
   confirmed minutes or invent a confirmation timestamp or a duration for an unknown reward.
-  Channels, Up next and game-priority rows have inset separators and modest 4px scrollbar
-  padding, smaller than Campaigns. Up next shows a shared date once only when reward windows
+  Bordered lists keep their scrollbar inside a stationary frame. Mining preferences Games
+  and Campaigns/History list view put the border on the scroll container, not the moving rows.
+  Cap these lists at 440px on smaller screens; retain their remaining-height desktop layout.
+  Campaign grid cards keep their existing layout. Channels, Up next and game-priority rows
+  retain inset separators and modest 4px scrollbar padding. Up next shows a shared date once only when reward windows
   match by instant and their upcoming state agrees; retain distinct per-drop dates.
   Channel views may fill missing game artwork from catalog records with the exact same game
   ID. Never change stream identity/eligibility or add network requests for this fallback.
@@ -604,10 +630,11 @@ embed it and run without a build tool/runtime companion. Production builds never
   Telegram credentials never appear in responses; no server-dashboard installer/updater.
 - Campaign details contain rewards and account/campaign links, with no streamer lists or status
   lookups. Streamer browsing and manual Watch actions belong in Mining's existing Channels panel.
-- Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
-  immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
-  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games
-  inside Filters. On phones put pagination to the right of the tabs, then a full-width search
+- Campaigns starts with Settings-style Available/History icon tabs and the campaign count
+  immediately left of refresh on the right. Show matching/total counts when filtering either tab;
+  otherwise show the total. Match Last confirmed's
+  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays inside Filters;
+  All games stays inside Games. On phones put pagination to the right of the tabs, then a full-width search
   row, followed by filter/sort/view controls and the count/refresh pair, wrapping when needed.
   Below 375px omit the decorative tab icons to make room; retain both text labels.
   Native icon-styled sorting offers Default, Newest (campaign start descending),
@@ -624,8 +651,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   page on smaller screens. Lock page scrolling while the full-page detail is open and contain
   its body scrolling; release the lock on close, navigation or return to the desktop layout.
   At desktop widths tabs, search and filters stay full width above the list and detail columns.
-  Split those columns equally, using a 12px layout gap plus the results scrollbar and its
-  1px card clearance, keeping the visible spacing close to the normal 16px grid gap.
+  Split those columns equally with a 12px layout gap. Grid results retain their outer
+  scrollbar gutter and 1px card clearance; list results keep the gutter inside the border.
   Both columns fill the remaining height with a compact 12px bottom margin; details keep the
   same height for short and long campaigns, with a fixed header and separately scrollable body.
   Scroll campaign results independently with a small scrollbar gutter; allow the controls area
