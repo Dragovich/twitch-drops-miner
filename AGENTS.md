@@ -549,8 +549,9 @@ embed it and run without a build tool/runtime companion. Production builds never
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
   Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
   In Watching text, only the streamer name links to their Twitch channel using the login.
-  Keep the 6px progress track and 8px count gap. Group the manual return action and timer
-  in one wrapping row, preserving phone hit targets. Its empty state adds 20px vertical padding.
+  Keep the 6px progress track and 8px count gap. Group the manual selection label, return-to-auto action and timer
+  in the Now mining header, including pending lookups, preserving phone hit targets.
+  Do not add a separate manual-controls footer below reward progress. Its empty state adds 20px vertical padding.
   Known rewards without confirmed progress show an empty progress bar and `0 / required minutes`
   in Mining and Campaigns,
   with an unconfirmed tooltip and accessible description. Suppress the redundant awaiting-progress
@@ -564,7 +565,14 @@ embed it and run without a build tool/runtime companion. Production builds never
   Channels paginates 25 rows with header chevrons. Search covers the full list and resets the page;
   page links survive navigation, clamp to available results and keep the watched stream first.
   Pagination does not change mining selection or fetch unrelated streams.
-  Keep expanded channel-entry controls and feedback inside the scrollable list body.
+  The Channels plus action opens one anchored picker over the list without changing row positions
+  or scroll. Search results and an optional return-to-auto timer share that picker; do not nest
+  another results popup. Focus search on open, support arrow/Enter selection, Escape/outside/Tab
+  dismissal, preserve drafts and restore trigger focus after selection or Escape. Bound the
+  picker to the visual viewport, open above when needed, and support older webviews without
+  the Popover API. Search only while open and cancel/fence late replies on close.
+  Close after an accepted selection; failed requests retain the picker and edits. Keep later
+  lookup errors visible in Channels when closed, and beside the input when reopened.
   Manual lookup has no preparing message; use a play-circle icon submit button with the Mine
   accessible name/tooltip, preserving its busy/disabled state, inline
   errors and return-to-auto control while a lookup is pending.
