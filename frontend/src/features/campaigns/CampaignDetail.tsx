@@ -221,7 +221,7 @@ export function CampaignDetail({
                           <p className="muted mt-1">
                             {drop.is_claimed &&
                               claim?.claimed_at_is_observed &&
-                              `${t('eligibility_claimed')} · `}
+                              `${t('eligibility_claimed')}: `}
                             {drop.is_claimed && claim
                               ? t(claim.claimed_at_is_observed ? 'first_observed' : 'claimed_at', {
                                   time: dateTime(claim.claimed_at),
@@ -280,7 +280,7 @@ export function CampaignDetail({
                               >
                                 {prerequisite.name}
                                 {prerequisite.is_claimed
-                                  ? ` · ${t('gui.inventory.status.claimed')}`
+                                  ? ` (${t('gui.inventory.status.claimed')})`
                                   : ''}
                               </button>
                             ) : (

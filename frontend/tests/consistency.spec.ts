@@ -299,7 +299,7 @@ test('Detail return retains filters through query edits and reveals its trigger 
   await page.getByRole('combobox', { name: 'Sort campaigns' }).selectOption('newest');
   await page.getByRole('button', { name: 'Change campaign layout' }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Active', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Twitch badges', exact: true }).uncheck();
   await page.setViewportSize({ width: 390, height: 500 });
   await page.getByRole('button', { name: 'Close details' }).press('Escape');
   await expect(page.getByRole('searchbox')).toHaveValue('reward 3');
@@ -392,7 +392,7 @@ test('Available rewards show claims once with truthful times and uncropped artwo
     await expect(art).toHaveCSS('object-fit', 'contain');
   entries[0]!.claimed_at_is_observed = true;
   await page.reload();
-  await expect(claimed.getByText(/^Claimed · First observed/)).toBeVisible();
+  await expect(claimed.getByText(/^Claimed: First observed/)).toBeVisible();
   await page.goto('/campaigns?tab=history&campaign=campaign-1&drop=reward-1');
   await expect(page.locator('#history-drop-reward-1 img')).toHaveCSS('object-fit', 'contain');
   await expect(page.locator('#history-drop-reward-1')).toHaveCSS('border-left-width', '0px');
