@@ -354,7 +354,7 @@ export default function Mining() {
                         id: channel.login,
                         name: channel.name,
                         image: channel.avatar_url,
-                        description: `@${channel.login} · ${t(channel.online ? 'gui.channels.live' : 'gui.channels.offline')}${channel.online && channel.game ? ` · ${channel.game}` : ''}`,
+                        description: `@${channel.login}, ${t(channel.online ? 'gui.channels.live' : 'gui.channels.offline')}${channel.online && channel.game ? `, ${channel.game}` : ''}`,
                       }))}
                       onSelect={(channel) => {
                         setChannelInput(channel.id);
@@ -427,7 +427,7 @@ export default function Mining() {
                   <p className="muted truncate">
                     {channel.online ? (
                       <>
-                        {channel.game ?? t('unknown_game')} ·{' '}
+                        {channel.game ?? t('unknown_game')},{' '}
                         {channel.viewers?.toLocaleString() ?? '—'} {t('gui.channels.viewers')}
                       </>
                     ) : (
@@ -527,7 +527,7 @@ export default function Mining() {
                       {item.priority && item.priority.reason !== 'saved_order' && (
                         <p className="muted mt-1">
                           {t(`reason_${item.priority.reason}`)}
-                          {item.priority.deadline && ` · ${dateTime(item.priority.deadline)}`}
+                          {item.priority.deadline && `: ${dateTime(item.priority.deadline)}`}
                         </p>
                       )}
                       <ul className="mt-2 space-y-2 text-muted">

@@ -192,7 +192,7 @@ for (const viewport of [
     await expect(sleeping).toContainText('@sleepy_streamer');
     await expect(sleeping).toContainText('Offline');
     await expect(sleeping.locator('img')).toHaveAttribute('src', avatar);
-    await expect(results.getByRole('option').last()).toContainText('Live · Rust');
+    await expect(results.getByRole('option').last()).toContainText('Live, Rust');
     const popup = (await page.locator('.search-popover').boundingBox())!;
     expect(popup.y).toBeGreaterThanOrEqual(8);
     expect(popup.y + popup.height).toBeLessThanOrEqual(viewport.height - 8);

@@ -195,7 +195,7 @@ for (const width of [1280, 390]) {
     await expect(progress).toHaveAttribute('aria-valuenow', '24000000');
     await expect(progress).toHaveAttribute('aria-valuemax', '50000000');
     await expect(progress.locator('div')).toHaveAttribute('style', 'width: 48%;');
-    await expect(updates.getByText('24.0 / 50.0 MB · 48%', { exact: true })).toBeVisible();
+    await expect(updates.getByText('24.0 / 50.0 MB (48%)', { exact: true })).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({ path: `../artifacts/desktop-updates-downloading-${width}.png` });
     await updates.getByRole('button', { name: 'Cancel', exact: true }).click();
