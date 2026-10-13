@@ -718,8 +718,7 @@ for (const width of [1440, 320]) {
       const artBox = (await artwork.boundingBox())!;
       const textBox = (await text.boundingBox())!;
       expect([artBox.width, artBox.height]).toEqual([88, 88]);
-      const avatarBox = (await text.locator('p > span').first().boundingBox())!;
-      expect([avatarBox.width, avatarBox.height]).toEqual([32, 32]);
+      await expect(text.locator('img, .rounded-full')).toHaveCount(0);
       expect(artBox.y + artBox.height / 2).toBeCloseTo(textBox.y + textBox.height / 2, 0);
       expect(artBox.x + artBox.width).toBeLessThan(textBox.x);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(

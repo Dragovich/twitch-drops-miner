@@ -218,8 +218,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   the owned, bounded game-query queue and generation cancellation through HTTP and native IPC.
   Search only while the manual picker is open; debounce and cancel superseded requests. Keep
   exact-login/URL submission available when search misses a channel or fails. Search results
-  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker,
-  Channels and Now mining, with a fallback for missing art; never persist this metadata.
+  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker
+  and Channels, with a fallback for missing art; never persist this metadata.
   Manual selection accepts an existing offline identity and waits for it to go live. Watching
   requires a live identity, not catalog coverage, selected games, a drops tag or local reward eligibility. Do not persist game selections or fabricate reward progress.
   Direct lookup and manual stream refresh use a short best-effort metadata attempt;
@@ -551,8 +551,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   Now mining uses 24px vertical/20px horizontal desktop padding and 16px phone padding.
   Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 88px
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
-  Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
-  In Watching text, only the streamer name links to their Twitch channel using the login.
+  Now mining omits streamer avatars, including manual watching and offline waiting. Retain
+  Watching text, with only the streamer name linking to their Twitch channel using the login.
   Keep the 6px progress track and 8px count gap. Group the manual return action and timer
   in one wrapping row, preserving phone hit targets. Its empty state adds 20px vertical padding.
   Known rewards without confirmed progress show an empty progress bar and `0 / required minutes`

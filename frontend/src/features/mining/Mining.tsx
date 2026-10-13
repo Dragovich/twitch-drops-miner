@@ -107,7 +107,6 @@ export default function Mining({ upNext }: { upNext: ReturnType<typeof useUpNext
       </a>
     </span>
   );
-  const manualChannel = data.channels.find((channel) => channel.id === data.manual_mode.channel_id);
   const channels = data.channels
     .filter((channel) =>
       `${channel.name} ${channel.game ?? ''}`
@@ -181,12 +180,7 @@ export default function Mining({ upNext }: { upNext: ReturnType<typeof useUpNext
                 <p className="muted mt-1">
                   {progress.game_name} / {progress.campaign_name}
                 </p>
-                {watching && !paused && (
-                  <p className="muted mt-2 flex items-center gap-2">
-                    <Art url={watching.avatar_url} className="size-8! rounded-full" />
-                    {watchingLabel}
-                  </p>
-                )}
+                {watching && !paused && <p className="muted mt-2">{watchingLabel}</p>}
               </div>
             </div>
             <div className="mt-4 md:mt-5">
@@ -224,16 +218,13 @@ export default function Mining({ upNext }: { upNext: ReturnType<typeof useUpNext
         ) : paused ? (
           <Empty className="py-5" title={t('paused_help')} />
         ) : data.manual_mode.active ? (
-          <div className="flex items-center gap-3">
-            <Art url={(watching ?? manualChannel)?.avatar_url} className="size-8! rounded-full" />
-            <p className="font-medium">
-              {watching
-                ? watchingLabel
-                : t('gui.channels.waiting_for_live', {
-                    channel: data.manual_mode.channel_name ?? '',
-                  })}
-            </p>
-          </div>
+          <p className="font-medium">
+            {watching
+              ? watchingLabel
+              : t('gui.channels.waiting_for_live', {
+                  channel: data.manual_mode.channel_name ?? '',
+                })}
+          </p>
         ) : (
           <Empty
             className="py-5"
