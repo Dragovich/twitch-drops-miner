@@ -110,7 +110,7 @@
       if (phase === 'downloading') {
         if (progress?.getAttribute('aria-valuenow') !== '24000000'
           || progress.getAttribute('aria-valuemax') !== '50000000'
-          || !maintenance().textContent.includes('24.0 / 50.0 MB · 48%')) {
+          || !maintenance().textContent.includes('24.0 / 50.0 MB (48%)')) {
           throw new Error('update download progress is missing or incorrect');
         }
       } else if (progress) {

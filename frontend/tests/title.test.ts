@@ -3,6 +3,7 @@ import fixture from './fixture.json' with { type: 'json' };
 import type { Snapshot } from '../src/shared/lib/types';
 import { translator } from '../src/shared/lib/i18n';
 import { miningTitle } from '../src/app/title';
+import { confirmedPercent } from '../src/shared/lib/progress';
 
 it('uses confirmed progress and replaces stale titles for pause, idle, disconnect and logout', () => {
   const data = structuredClone(fixture) as Snapshot;
@@ -40,4 +41,16 @@ it('keeps exact integer percentages without rounding incomplete progress up', ()
   data.current_drop!.confirmed_minutes = 59;
   data.current_drop!.required_minutes = 60;
   expect(miningTitle(data, true, t)).toBe('98% Rust - Drops Miner');
+});
+
+it('omits percentages without confirmed minutes and a valid watch requirement', () => {
+  expect(confirmedPercent(null)).toBeNull();
+  for (const patch of [
+    { confirmed_at: null },
+    { confirmed_minutes: undefined },
+    { confirmed_minutes: Number.NaN },
+    { required_minutes: 0 },
+    { required_minutes: Number.POSITIVE_INFINITY },
+  ])
+    expect(confirmedPercent({ ...fixture.current_drop, ...patch })).toBeNull();
 });
