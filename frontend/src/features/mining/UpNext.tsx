@@ -77,7 +77,7 @@ export default function UpNext({
             <h3 className="sticky top-0 z-10 bg-surface">
               <button
                 type="button"
-                className="flex min-h-11 w-full items-center gap-3 rounded py-3 text-start hover:bg-field"
+                className="group flex min-h-11 w-full cursor-pointer items-center gap-3 rounded py-3 text-start"
                 aria-expanded={expanded}
                 aria-controls={id}
                 aria-labelledby={`${id}-name`}
@@ -88,7 +88,7 @@ export default function UpNext({
                 <Art url={game.game_icon} className="size-8!" />
                 <span
                   id={`${id}-name`}
-                  className="min-w-0 flex-1 line-clamp-2 wrap-anywhere font-medium"
+                  className="min-w-0 flex-1 line-clamp-2 wrap-anywhere font-medium transition-colors duration-150 group-hover:text-accent motion-reduce:transition-none"
                   title={game.game_name}
                 >
                   {game.game_name}
@@ -102,7 +102,7 @@ export default function UpNext({
                   {summary}
                 </span>
                 <Icon
-                  className="mdi-icon shrink-0 text-muted"
+                  className="mdi-icon shrink-0 text-muted transition-colors duration-150 group-hover:text-accent motion-reduce:transition-none"
                   path={expanded ? mdiChevronDown : mdiChevronRight}
                 />
               </button>
