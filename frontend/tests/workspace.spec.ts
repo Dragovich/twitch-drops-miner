@@ -1080,10 +1080,10 @@ test('campaign panes fill the height below full-width controls and keep row hove
       .getByRole('group', { name: 'Filters', exact: true })
       .boundingBox())!;
     const filteredBounds = (await detail.boundingBox())!;
-    expect(filters.x).toBe(toolbar.x);
-    expect(filters.width).toBeCloseTo(toolbar.width, 0);
+    expect(filters.x).toBeGreaterThanOrEqual(toolbar.x);
+    expect(filters.width).toBeLessThanOrEqual(320);
     expect(filteredBounds.y).toBe((await list.boundingBox())!.y);
-    expect(filteredBounds.y).toBeGreaterThan(bounds.y);
+    expect(filteredBounds).toEqual(bounds);
     expect(filteredBounds.y + filteredBounds.height).toBe(viewport.height - 12);
     await expect(
       detail.getByRole('heading', { name: 'Campaign 01', exact: true }),
@@ -1201,6 +1201,17 @@ for (const view of ['grid', 'list']) {
     page,
     request,
   }) => {
+    if (view === 'list')
+      await page.addInitScript(() => {
+        Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+          value: undefined,
+          configurable: true,
+        });
+        Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
+          value: undefined,
+          configurable: true,
+        });
+      });
     const campaigns = Array.from({ length: 30 }, (_, index) => ({
       ...fixture.campaigns[0]!,
       id: `long-${index}`,
@@ -1238,7 +1249,7 @@ for (const view of ['grid', 'list']) {
     await expect(next).toBeFocused();
     await expect(next).toBeInViewport({ ratio: 0.99 });
     await page.setViewportSize({ width: 1280, height: 360 });
-    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    await page.getByRole('button', { name: /^Games/ }).click();
     await page.context().setOffline(true);
     try {
       await request.post('/__test/reconnect', { headers, data: {} });
@@ -1247,6 +1258,18 @@ for (const view of ['grid', 'list']) {
       await games.focus();
       await games.press('End');
       await expect.poll(() => games.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      const filters = page.getByRole('button', { name: 'Filters', exact: true });
+      await filters.click();
+      await filters.press('Tab');
+      const options = page
+        .getByRole('group', { name: 'Filters', exact: true })
+        .locator('[tabindex="0"]');
+      await expect(options).toBeFocused();
+      await options.press('End');
+      await expect.poll(() => options.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect(
+        options.getByRole('checkbox', { name: 'Game items', exact: true }),
+      ).toBeInViewport();
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(360);
     } finally {
@@ -1523,7 +1546,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
   await page.getByRole('link', { name: 'Campaigns', exact: true }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Active', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Twitch badges', exact: true }).uncheck();
   await expect(page.getByRole('alert')).toContainText('Changes could not be saved');
   connection.send('42["protocol_mismatch",{"protocol":3}]');
   const reload = page.getByRole('button', { name: 'Reload dashboard', exact: true });
@@ -1535,7 +1558,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   await expect(page.getByRole('alert')).toContainText('Your unsaved edits were restored');
   const before = await (await request.get('/api/settings')).json();
   expect(before.mining_benefits.BADGE).toBe(true);
-  expect(before.inventory_filters.show_active).toBe(true);
+  expect(before.inventory_filters.show_benefit_badge).toBe(true);
   expect(
     (
       await request.post('/api/settings', {
@@ -1543,7 +1566,7 @@ test('Reload dashboard preserves real nested edits for review against newer sett
         data: {
           revision: before.revision,
           mining_benefits: { EMOTE: false },
-          inventory_filters: { show_upcoming: false },
+          inventory_filters: { show_benefit_emote: false },
           connection_quality: 5,
         },
       })
@@ -1561,8 +1584,8 @@ test('Reload dashboard preserves real nested edits for review against newer sett
   const saved = await (await request.get('/api/settings')).json();
   expect(saved.inventory_filters).toEqual({
     ...before.inventory_filters,
-    show_active: false,
-    show_upcoming: false,
+    show_benefit_badge: false,
+    show_benefit_emote: false,
   });
   expect(saved.mining_benefits).toEqual({ ...before.mining_benefits, BADGE: false, EMOTE: false });
   expect(saved.connection_quality).toBe(5);

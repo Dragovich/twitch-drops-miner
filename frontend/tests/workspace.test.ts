@@ -52,40 +52,51 @@ it('requires a fresh snapshot after a revision gap, disconnect or process restar
   ).toBe(true);
 });
 it('merges only edited nested settings and retains edits made during an in-flight save', () => {
-  const sent = { inventory_filters: { show_active: false }, mining_benefits: { BADGE: false } };
+  const sent = {
+    inventory_filters: { show_benefit_badge: false },
+    mining_benefits: { BADGE: false },
+  };
   const queued = {
-    inventory_filters: { show_active: false, show_upcoming: false },
+    inventory_filters: { show_benefit_badge: false, show_benefit_emote: false },
     mining_benefits: { BADGE: true },
     proxy: 'http://example.test',
   };
   expect(remainingChanges(queued, sent)).toEqual({
-    inventory_filters: { show_upcoming: false },
+    inventory_filters: { show_benefit_emote: false },
     mining_benefits: { BADGE: true },
     proxy: 'http://example.test',
   });
   const merged = mergeDraft(snapshot.settings, sent);
-  expect(merged.inventory_filters.show_active).toBe(false);
-  expect(merged.inventory_filters.show_expired).toBe(
-    snapshot.settings.inventory_filters.show_expired,
+  expect(merged.inventory_filters.show_benefit_badge).toBe(false);
+  expect(merged.inventory_filters.show_benefit_item).toBe(
+    snapshot.settings.inventory_filters.show_benefit_item,
   );
   expect(merged.mining_benefits.EMOTE).toBe(snapshot.settings.mining_benefits.EMOTE);
 });
 it('round-trips shared campaign filters without losing search, sorting or detail links', () => {
   const params = new URLSearchParams(
-    'q=rust&sort=ending&view=list&campaign=one&drop=reward&page=3&show_expired=1',
+    'q=rust&sort=ending&view=list&campaign=one&drop=reward&page=3&show_expired=1&show_active=0&show_upcoming=0&show_finished=1&show_only_not_linked=1&show_benefit_other=0',
   );
   const filters = {
     ...snapshot.settings.inventory_filters,
-    show_active: false,
+    show_benefit_badge: false,
     game_name_search: [],
   };
   const shared = writeFilters(params, filters);
   expect(shared.has('page')).toBe(false);
-  expect(shared.has('show_expired')).toBe(false);
-  expect(displayFilters(params, filters).show_expired).toBe(filters.show_expired);
+  for (const key of [
+    'show_expired',
+    'show_active',
+    'show_upcoming',
+    'show_finished',
+    'show_only_not_linked',
+    'show_benefit_other',
+  ])
+    expect(shared.has(key)).toBe(false);
+  expect(displayFilters(params, filters)).toEqual(filters);
   for (const key of ['q', 'sort', 'view', 'campaign', 'drop'])
     expect(shared.get(key)).toBe(params.get(key));
   expect(
-    displayFilters(shared, { ...filters, show_active: true, game_name_search: ['Other'] }),
+    displayFilters(shared, { ...filters, show_benefit_badge: true, game_name_search: ['Other'] }),
   ).toEqual(filters);
 });

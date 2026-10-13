@@ -299,7 +299,7 @@ test('Detail return retains filters through query edits and reveals its trigger 
   await page.getByRole('combobox', { name: 'Sort campaigns' }).selectOption('newest');
   await page.getByRole('button', { name: 'Change campaign layout' }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Active', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Twitch badges', exact: true }).uncheck();
   await page.setViewportSize({ width: 390, height: 500 });
   await page.getByRole('button', { name: 'Close details' }).press('Escape');
   await expect(page.getByRole('searchbox')).toHaveValue('reward 3');

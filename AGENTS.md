@@ -440,6 +440,22 @@ embed it and run without a build tool/runtime companion. Production builds never
   Preserve its artwork and aspect ratio; Vite emits one hashed asset for browser caching.
   Keep adjacent brand text accessible and sidebar navigation reachable in short windows.
 - Keep the subtle charcoal/Manrope design, individual `@mdi/js` paths rendered with `@mdi/react`, and shared native controls.
+  Campaign Games and Filters use separate button-anchored overlays without moving results.
+  Games retains saved multi-selection and has one scrolling checklist below its search.
+  History shows Games only. Bound both overlays to the viewport, support older webviews,
+  and retain keyboard access, outside dismissal and Escape focus return. Keep touch-button
+  focus inside each overlay so All games and Clear filters work on the first tap.
+  Both action footers have a divider. Keep Games compact; let Filters fit its contents
+  within the available viewport, scrolling its options only when space is limited.
+  Hide selected games defaults false when absent and affects Available display only, using
+  the same folded game selection as Mine. Remember the filter, preserve History and direct
+  detail links, and recover focus/pagination when selecting a game removes its cards.
+  Filters contains Hide selected games and Twitch badges / Twitch emotes / Game items.
+  All reward types selected means no type restriction, including unknown types; none selected
+  means no matches. Narrowed type selections match unclaimed, unexpired watch rewards using
+  core eligibility, independent of mining selection and ignores. Details retain all rewards
+  and prerequisites. Remove retired status, linkage and Other controls; ignore their old saved
+  values and query flags. Preserve existing game/type choices without a settings migration.
   Do not use middle-dot (U+00B7) separators in authored UI text or documentation,
   except the README's Quick start / Dashboard / Updating / Troubleshooting navigation.
   Use wording, commas, colons or parentheses instead.
@@ -604,10 +620,11 @@ embed it and run without a build tool/runtime companion. Production builds never
   Telegram credentials never appear in responses; no server-dashboard installer/updater.
 - Campaign details contain rewards and account/campaign links, with no streamer lists or status
   lookups. Streamer browsing and manual Watch actions belong in Mining's existing Channels panel.
-- Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
-  immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
-  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games
-  inside Filters. On phones put pagination to the right of the tabs, then a full-width search
+- Campaigns starts with Settings-style Available/History icon tabs and the campaign count
+  immediately left of refresh on the right. Show matching/total counts when filtering either tab;
+  otherwise show the total. Match Last confirmed's
+  12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays inside Filters;
+  All games stays inside Games. On phones put pagination to the right of the tabs, then a full-width search
   row, followed by filter/sort/view controls and the count/refresh pair, wrapping when needed.
   Below 375px omit the decorative tab icons to make room; retain both text labels.
   Native icon-styled sorting offers Default, Newest (campaign start descending),

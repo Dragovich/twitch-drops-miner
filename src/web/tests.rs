@@ -681,7 +681,7 @@ async fn invalid_settings_are_rejected_and_retired_credentials_are_not_exposed()
     for patch in [
         json!({"proxy":"http://user:secret@example/path"}),
         json!({"connection_quality":7}),
-        json!({"inventory_filters":{"show_active":"yes"}}),
+        json!({"inventory_filters":{"show_benefit_badge":"yes"}}),
     ] {
         let (status, _, body) = test
             .call(

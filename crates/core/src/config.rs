@@ -51,30 +51,20 @@ impl GameMetadata {
 #[serde(default)]
 pub struct Filters {
     pub game_name_search: Vec<String>,
-    pub show_active: bool,
-    pub show_upcoming: bool,
-    pub show_expired: bool,
-    pub show_finished: bool,
-    pub show_only_not_linked: bool,
+    pub hide_selected_games: bool,
     pub show_benefit_badge: bool,
     pub show_benefit_emote: bool,
     pub show_benefit_item: bool,
-    pub show_benefit_other: bool,
 }
 
 impl Default for Filters {
     fn default() -> Self {
         Self {
             game_name_search: vec![],
-            show_active: true,
-            show_upcoming: true,
-            show_expired: false,
-            show_finished: false,
-            show_only_not_linked: false,
+            hide_selected_games: false,
             show_benefit_badge: true,
             show_benefit_emote: true,
             show_benefit_item: true,
-            show_benefit_other: true,
         }
     }
 }
@@ -101,7 +91,6 @@ pub struct Settings {
     pub auto_mine_emotes: bool,
     pub drop_name_blacklist: Vec<String>,
     pub inventory_filters: Filters,
-    pub inventory_filters_version: u32,
     pub inventory_list_view: bool,
     pub mining_benefits: BTreeMap<String, bool>,
     pub proxy: String,
@@ -122,7 +111,6 @@ impl Default for Settings {
             auto_mine_emotes: false,
             drop_name_blacklist: vec![],
             inventory_filters: Filters::default(),
-            inventory_filters_version: 2,
             inventory_list_view: false,
             mining_benefits: ["BADGE", "DIRECT_ENTITLEMENT", "EMOTE", "UNKNOWN"]
                 .into_iter()
@@ -140,15 +128,7 @@ impl Default for Settings {
 pub struct InvalidSettings;
 
 impl Settings {
-    pub fn from_saved(mut value: Value) -> Result<Self, InvalidSettings> {
-        let mut legacy = serde_json::to_value(Filters::default()).map_err(|_| InvalidSettings)?;
-        legacy["show_active"] = false.into();
-        if value.get("inventory_filters_version").is_none()
-            && value.get("inventory_filters") == Some(&legacy)
-        {
-            value["inventory_filters"] =
-                serde_json::to_value(Filters::default()).map_err(|_| InvalidSettings)?;
-        }
+    pub fn from_saved(value: Value) -> Result<Self, InvalidSettings> {
         let mut result: Self = serde_json::from_value(value).map_err(|_| InvalidSettings)?;
         result.connection_quality = result.connection_quality.clamp(1, 6);
         result.normalize()?;
@@ -161,7 +141,6 @@ impl Settings {
         self.inventory_filters.game_name_search =
             normalize_names(&self.inventory_filters.game_name_search);
         self.proxy = self.proxy.trim().to_owned();
-        self.inventory_filters_version = 2;
         if !(1..=6).contains(&self.connection_quality)
             || !(1..=1440).contains(&self.minimum_refresh_interval_minutes)
             || self.games_to_watch.len() > 1000
@@ -200,7 +179,7 @@ impl Settings {
         let updates = patch.as_object().ok_or(InvalidSettings)?;
         let mut current = serde_json::to_value(self).map_err(|_| InvalidSettings)?;
         for (key, value) in updates {
-            if value.is_null() || current.get(key).is_none() || key == "inventory_filters_version" {
+            if value.is_null() || current.get(key).is_none() {
                 continue;
             }
             if matches!(key.as_str(), "inventory_filters" | "mining_benefits") {
@@ -412,6 +391,29 @@ mod tests {
     }
 
     #[test]
+    fn hide_selected_games_defaults_off_and_preserves_explicit_choices() {
+        assert!(!Settings::default().inventory_filters.hide_selected_games);
+        let old = Settings::from_saved(json!({"games_to_watch":["Rust"],
+            "inventory_filters":{"show_benefit_emote":false}}))
+        .unwrap();
+        assert!(!old.inventory_filters.hide_selected_games);
+        assert!(!old.inventory_filters.show_benefit_emote);
+        for enabled in [true, false] {
+            let saved = old
+                .patched(&json!({"inventory_filters":{"hide_selected_games":enabled}}))
+                .unwrap();
+            let restored = Settings::from_saved(serde_json::to_value(&saved).unwrap()).unwrap();
+            assert_eq!(restored.inventory_filters.hide_selected_games, enabled);
+            assert!(!restored.inventory_filters.show_benefit_emote);
+            assert_eq!(restored.games_to_watch, ["Rust"]);
+        }
+        assert!(
+            old.patched(&json!({"inventory_filters":{"hide_selected_games":"true"}}))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn progress_percentage_defaults_off_and_survives_settings_updates() {
         let old = Settings::from_saved(json!({"games_to_watch":["Rust"]})).unwrap();
         assert!(!old.show_progress_percentage);
@@ -441,37 +443,49 @@ mod tests {
             .patched(
                 &json!({"games_to_watch": [" Rust ", "rust", "Straße", "STRASSE"],
                 "drop_name_blacklist": [" coat ", "", "COAT"],
-                "inventory_filters": {"show_upcoming": false}}),
+                "inventory_filters": {"show_benefit_emote": false}}),
             )
             .unwrap();
         assert_eq!(settings.games_to_watch, ["Rust", "Straße"]);
         assert_eq!(settings.drop_name_blacklist, ["coat"]);
-        assert!(settings.inventory_filters.show_active);
-        assert!(!settings.inventory_filters.show_upcoming);
+        assert!(settings.inventory_filters.show_benefit_badge);
+        assert!(!settings.inventory_filters.show_benefit_emote);
         assert!(settings.selected("STRASSE"));
         assert!(!Settings::default().selected("Rust"));
     }
 
     #[test]
-    fn only_old_default_filters_migrate() {
-        let mut old = serde_json::to_value(Settings::default()).unwrap();
-        old.as_object_mut()
-            .unwrap()
-            .remove("inventory_filters_version");
-        old["inventory_filters"]["show_active"] = false.into();
-        assert!(
-            Settings::from_saved(old.clone())
-                .unwrap()
-                .inventory_filters
-                .show_active
-        );
-        old["inventory_filters"]["show_expired"] = true.into();
-        assert!(
-            !Settings::from_saved(old)
-                .unwrap()
-                .inventory_filters
-                .show_active
-        );
+    fn retired_filters_are_ignored_without_resetting_display_or_mining_choices() {
+        let saved = json!({
+            "inventory_filters_version": 2,
+            "games_to_watch": ["Rust"],
+            "mining_benefits": {"EMOTE": false},
+            "inventory_filters": {
+                "game_name_search": [" Sea of Thieves "],
+                "show_active": false, "show_upcoming": false, "show_expired": true,
+                "show_finished": true, "show_only_not_linked": true, "show_benefit_other": false,
+                "show_benefit_badge": false, "show_benefit_emote": false,
+                "hide_selected_games": true
+            }
+        });
+        let settings = Settings::from_saved(saved).unwrap();
+        let filters = &settings.inventory_filters;
+        assert_eq!(filters.game_name_search, ["Sea of Thieves"]);
+        assert!(filters.hide_selected_games && filters.show_benefit_item);
+        assert!(!filters.show_benefit_badge && !filters.show_benefit_emote);
+        assert_eq!(settings.games_to_watch, ["Rust"]);
+        assert!(!settings.mining_benefits["EMOTE"]);
+        let encoded = serde_json::to_value(&settings).unwrap();
+        assert!(encoded.get("inventory_filters_version").is_none());
+        assert_eq!(encoded["inventory_filters"].as_object().unwrap().len(), 5);
+        assert!(Settings::from_saved(encoded).unwrap() == settings);
+        let patched = settings
+            .patched(&json!({
+                "inventory_filters_version": 999,
+                "inventory_filters": {"show_only_not_linked": true, "show_benefit_other": true}
+            }))
+            .unwrap();
+        assert!(patched == settings);
     }
 
     #[test]
@@ -482,7 +496,7 @@ mod tests {
             json!({"minimum_refresh_interval_minutes": 0}),
             json!({"games_to_watch": "Rust"}),
             json!({"proxy": "http://secret@example.invalid/path"}),
-            json!({"inventory_filters": {"show_active": "yes"}}),
+            json!({"inventory_filters": {"show_benefit_badge": "yes"}}),
         ] {
             assert_eq!(
                 Settings::default()
