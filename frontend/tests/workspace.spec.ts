@@ -1,6 +1,7 @@
 import { test, expect, type WebSocketRoute } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fixture from './fixture.json' with { type: 'json' };
+import type { Snapshot } from '../src/shared/lib/types';
 
 const headers = { 'X-TDM-Request': '1' };
 test.beforeEach(async ({ request }) => {
@@ -411,9 +412,7 @@ test('simplified captions and settings retain progress, recovery and refresh con
       data: { ...fixture, mining: { ...mining, state: 'awaiting_claim' }, activity },
     },
   });
-  await expect(
-    page.getByText('Watch time complete; waiting for claim confirmation', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText('Watch time complete', { exact: true })).toBeVisible();
   await page.goto('/campaigns?tab=history');
   await expect(page.getByRole('button', { name: 'Refresh inventory', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Refresh inventory', exact: true }).click();
@@ -467,6 +466,169 @@ test('simplified captions and settings retain progress, recovery and refresh con
       });
     }
   }
+});
+
+test('campaign details distinguish active mining from reward eligibility', async ({
+  page,
+  request,
+}) => {
+  const data = structuredClone(fixture) as Snapshot;
+  data.campaigns[0]!.drops[1]!.eligibility = 'ready';
+  data.campaigns[0]!.drops[1]!.prerequisites = [];
+  data.campaigns[0]!.drops[1]!.confirmed_minutes = 41;
+  data.campaigns[0]!.drops[1]!.confirmed_at = data.campaigns[0]!.drops[0]!.confirmed_at;
+  data.campaigns.push({ ...structuredClone(data.campaigns[0]!), id: 'campaign-2' });
+  const mining = data.mining!;
+  async function publish() {
+    expect(
+      (
+        await request.post('/__test/event', {
+          headers,
+          data: { event: 'initial_state', data },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  await publish();
+  await page.goto('/campaigns?campaign=campaign-1');
+  const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  const first = detail.locator('#drop-reward-1');
+  const second = detail.locator('#drop-reward-2');
+  const activeLabel = detail.getByText('Mining', { exact: true });
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  await expect(first.getByText('Ready to mine', { exact: true })).toHaveCount(0);
+  await expect(second.getByText('Ready to mine', { exact: true })).toHaveCount(0);
+  await expect(second.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '41');
+  for (const state of ['awaiting_progress', 'manual_watching'] as const) {
+    mining.state = state;
+    await publish();
+    await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  }
+  mining.drop_id = 'reward-2';
+  await publish();
+  await expect(second.getByText('Mining', { exact: true })).toBeVisible();
+  await expect(first.getByText('Ready to mine', { exact: true })).toHaveCount(0);
+  await page.goto('/campaigns?campaign=campaign-2');
+  await expect(activeLabel).toHaveCount(0);
+  mining.campaign_id = 'campaign-2';
+  mining.drop_id = 'reward-1';
+  mining.state = 'watching';
+  await publish();
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  data.settings.mining_paused = true;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  data.settings.mining_paused = false;
+  for (const state of ['paused', 'waiting_channel', 'manual_offline', 'discovering'] as const) {
+    mining.state = state;
+    await publish();
+    await expect(activeLabel).toHaveCount(0);
+  }
+  mining.state = 'watching';
+  data.login.user_id = null;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  data.login.user_id = fixture.login.user_id;
+  mining.drop_id = null;
+  await publish();
+  await expect(activeLabel).toHaveCount(0);
+  mining.drop_id = 'reward-1';
+  const reward = data.campaigns[1]!.drops[0]!;
+  for (const eligibility of ['awaiting_claim', 'claimed', 'prerequisite'] as const) {
+    reward.eligibility = eligibility;
+    reward.is_claimed = eligibility === 'claimed';
+    await publish();
+    await expect(activeLabel).toHaveCount(0);
+  }
+  reward.eligibility = 'ready';
+  await publish();
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  try {
+    await page.context().setOffline(true);
+    await expect(activeLabel).toHaveCount(0);
+  } finally {
+    await page.context().setOffline(false);
+  }
+  await expect(first.getByText('Mining', { exact: true })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('campaign details group account actions and keep campaign context by the heading and dates', async ({
+  page,
+  request,
+}) => {
+  const data = structuredClone(fixture) as Snapshot;
+  const campaign = data.campaigns[0]!;
+  campaign.linked = false;
+  campaign.link_url = 'https://example.com/connect';
+  campaign.priority = {
+    reason: 'short_event',
+    deadline: campaign.ends_at,
+    target_ids: ['reward-2'],
+  };
+  async function publish() {
+    expect(
+      (
+        await request.post('/__test/event', {
+          headers,
+          data: { event: 'initial_state', data },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  await publish();
+  await page.goto('/campaigns?campaign=campaign-1');
+  const detail = page.getByRole('complementary', { name: 'Campaign details' });
+  const campaignLink = detail.getByRole('link', { name: 'Open campaign on Twitch' });
+  const connect = detail.getByRole('link', { name: 'Connect game account', exact: true });
+  const account = detail.getByText('Game account not linked', { exact: true });
+  const priority = detail.getByText('Short event prio', { exact: true });
+  await expect(detail.locator('header').getByRole('link')).toHaveCount(1);
+  await expect(campaignLink).toHaveAttribute('href', campaign.campaign_url);
+  await expect(connect).toHaveText('Connect');
+  await expect(connect).toHaveAttribute('href', campaign.link_url);
+  await expect(account.locator('..').getByRole('link')).toHaveCount(1);
+  await expect(priority).toBeVisible();
+  await expect(priority.locator('..').getByText(/ — /)).toHaveCount(1);
+  await expect(detail.getByText(/^Short event prio:/)).toHaveCount(0);
+  await expect(detail.getByText('Prioritizing', { exact: true })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: 'Trail companion', exact: true })).toHaveCount(0);
+  for (const width of [1920, 1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(campaignLink).toBeInViewport();
+    await expect(connect).toBeInViewport();
+    expect(await detail.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    if (width === 1920) {
+      expect((await connect.boundingBox())!.y).toBeCloseTo((await account.boundingBox())!.y, 0);
+      expect((await priority.boundingBox())!.y).toBeCloseTo(
+        (await priority.locator('..').getByText(/ — /).boundingBox())!.y,
+        0,
+      );
+    }
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await detail.screenshot({ path: `../artifacts/campaign-detail-clean-${width}.png` });
+  }
+  await detail.getByRole('button', { name: 'Explorer jacket', exact: true }).click();
+  await expect(page).toHaveURL(/drop=reward-1/);
+  await expect(detail.locator('#drop-reward-1')).toHaveAttribute('aria-current', 'true');
+  campaign.linked = null;
+  await publish();
+  await expect(connect).toHaveCount(0);
+  await expect(detail.getByRole('link', { name: 'Check account link' })).toBeVisible();
+  campaign.linked = true;
+  campaign.finished = true;
+  await publish();
+  await expect(detail.getByText('Game account linked', { exact: true })).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Check account link' })).toHaveCount(0);
+  await expect(priority).toHaveCount(0);
+  campaign.linked = false;
+  campaign.campaign_url = 'javascript:alert(1)';
+  campaign.link_url = 'javascript:alert(1)';
+  campaign.name = 'LongCampaignName'.repeat(10);
+  await publish();
+  await expect(campaignLink).toHaveCount(0);
+  await expect(connect).toHaveCount(0);
+  expect(await detail.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
 test('campaign details show shared dates once and preserve distinct reward windows', async ({
@@ -1396,6 +1558,8 @@ test('switching details closes back to the list and live updates preserve reward
       ...first.drops[0]!,
       id: `second-${index}`,
       name: `Reward ${index}`,
+      eligibility: index === 11 ? 'prerequisite' : 'ready',
+      prerequisites: index === 11 ? ['second-10'] : [],
     })),
   };
   await request.post('/__test/event', {
@@ -1405,7 +1569,8 @@ test('switching details closes back to the list and live updates preserve reward
   await page.goto('/campaigns?view=list');
   await page.getByRole('button', { name: 'Open Autumn expedition', exact: true }).click();
   await page.getByRole('button', { name: 'Open Second campaign', exact: true }).click();
-  await expect(page.getByText('Prioritizing', { exact: true })).toBeVisible();
+  await expect(page.getByText('Earliest reward deadline', { exact: true })).toBeVisible();
+  await expect(page.getByText('Prioritizing', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Reward 10', exact: true }).click();
   await expect(page).toHaveURL(/drop=second-10/);
   await page.getByRole('button', { name: 'Close details' }).click();

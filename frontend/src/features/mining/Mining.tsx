@@ -1,4 +1,5 @@
 import MiningPreferences from './MiningPreferences';
+import UpNext, { type useUpNextState } from './UpNext';
 import ChannelPicker from './ChannelPicker';
 import { CampaignLink } from '../campaigns/CampaignLink';
 import { Icon } from '@mdi/react';
@@ -29,7 +30,7 @@ import {
   dateTime,
   ConfirmedTime,
 } from '../../shared/ui/index';
-export default function Mining() {
+export default function Mining({ upNext }: { upNext: ReturnType<typeof useUpNextState> }) {
   const { data, connected, autosave } = useMiner();
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -82,7 +83,6 @@ export default function Mining() {
       </a>
     </span>
   );
-  const manualChannel = data.channels.find((channel) => channel.id === data.manual_mode.channel_id);
   const channels = data.channels
     .filter((channel) =>
       `${channel.name} ${channel.game ?? ''}`
@@ -172,12 +172,7 @@ export default function Mining() {
                 <p className="muted mt-1">
                   {progress.game_name} / {progress.campaign_name}
                 </p>
-                {watching && !paused && (
-                  <p className="muted mt-2 flex items-center gap-2">
-                    <Art url={watching.avatar_url} className="size-8! rounded-full" />
-                    {watchingLabel}
-                  </p>
-                )}
+                {watching && !paused && <p className="muted mt-2">{watchingLabel}</p>}
               </div>
             </div>
             <div className="mt-4 md:mt-5">
@@ -216,16 +211,13 @@ export default function Mining() {
         ) : paused ? (
           <Empty className="py-5" title={t('paused_help')} />
         ) : data.manual_mode.active ? (
-          <div className="flex items-center gap-3">
-            <Art url={(watching ?? manualChannel)?.avatar_url} className="size-8! rounded-full" />
-            <p className="font-medium">
-              {watching
-                ? watchingLabel
-                : t('gui.channels.waiting_for_live', {
-                    channel: data.manual_mode.channel_name ?? '',
-                  })}
-            </p>
-          </div>
+          <p className="font-medium">
+            {watching
+              ? watchingLabel
+              : t('gui.channels.waiting_for_live', {
+                  channel: data.manual_mode.channel_name ?? '',
+                })}
+          </p>
         ) : (
           <Empty
             className="py-5"
@@ -368,102 +360,12 @@ export default function Mining() {
           <div
             id="up-next-list"
             data-restore-scroll
-            className="scroll-list min-h-0 max-h-[440px] overflow-y-auto focus-visible:bg-field xl:max-h-none xl:flex-1"
+            className="scroll-list min-h-0 max-h-[440px] scroll-pt-20 overflow-y-auto focus-visible:bg-field xl:max-h-none xl:flex-1"
             role="region"
             aria-labelledby="up-next-heading"
             tabIndex={0}
           >
-            {data.wanted_items.map((game, index) => (
-              <div key={game.game_name} className="mx-4 border-b border-divider py-4 last:border-0">
-                <div className="flex items-center gap-3">
-                  <span className="w-4 text-[13px] tabular-nums text-muted">{index + 1}</span>
-                  <Art url={game.game_icon} className="size-8" />
-                  <p className="font-medium">{game.game_name}</p>
-                  <span className="muted ms-auto text-xs">
-                    {game.saved_rank
-                      ? t('saved_position', { count: game.saved_rank })
-                      : t('automatic')}
-                  </span>
-                </div>
-                {game.campaigns.map((item) => {
-                  const dates = item.drops.map((drop) => {
-                    const upcoming = drop.eligibility === 'upcoming';
-                    const time = upcoming ? drop.starts_at : drop.ends_at;
-                    return {
-                      start: Date.parse(drop.starts_at ?? ''),
-                      end: Date.parse(drop.ends_at ?? ''),
-                      upcoming,
-                      text: time
-                        ? t(upcoming ? 'gui.inventory.starts' : 'gui.inventory.ends', {
-                            time: dateTime(time),
-                          })
-                        : '',
-                    };
-                  });
-                  const sharedDate =
-                    dates.length > 1 &&
-                    dates.every(
-                      (date) =>
-                        date.start === dates[0]?.start &&
-                        date.end === dates[0]?.end &&
-                        date.upcoming === dates[0]?.upcoming,
-                    );
-                  return (
-                    <div className="mt-3 ps-7 text-[13px]" key={item.id}>
-                      <CampaignLink
-                        id={`up-next-campaign-${item.id}`}
-                        className="text-link"
-                        to={`/campaigns?campaign=${encodeURIComponent(item.id)}`}
-                      >
-                        {item.name}
-                      </CampaignLink>
-                      {sharedDate && <p className="muted mt-1 text-xs">{dates[0]?.text}</p>}
-                      {item.priority && item.priority.reason !== 'saved_order' && (
-                        <p className="muted mt-1">
-                          {t(`reason_${item.priority.reason}`)}
-                          {item.priority.deadline && `: ${dateTime(item.priority.deadline)}`}
-                        </p>
-                      )}
-                      <ul className="mt-2 space-y-2 text-muted">
-                        {item.drops.map((drop, position) => (
-                          <li
-                            className="flex items-start gap-3"
-                            key={drop.id || `${drop.name}/${position}`}
-                          >
-                            <Art url={drop.image_url} className="size-9" fit="contain" />
-                            <div className="min-w-0 flex-1">
-                              <CampaignLink
-                                id={`up-next-drop-${item.id}-${drop.id || position}`}
-                                className="hover:underline text-soft"
-                                to={`/campaigns?campaign=${encodeURIComponent(item.id)}${drop.id ? `&drop=${encodeURIComponent(drop.id)}` : ''}`}
-                              >
-                                {drop.name}
-                              </CampaignLink>
-                              {drop.eligibility && drop.eligibility !== 'ready' && (
-                                <p className="text-xs mt-1">
-                                  {t(`eligibility_${drop.eligibility}`)}
-                                </p>
-                              )}
-                              {!sharedDate && dates[position]?.text && (
-                                <p className="text-xs mt-1">{dates[position]?.text}</p>
-                              )}
-                              {drop.benefits.some((benefit) => benefit !== drop.name) && (
-                                <p className="mt-0.5 text-xs">
-                                  {drop.benefits
-                                    .filter((benefit) => benefit !== drop.name)
-                                    .join(', ')}
-                                </p>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            {!data.wanted_items.length && <Empty title={t('gui.wanted.none')} />}
+            <UpNext games={data.wanted_items} disclosure={upNext} />
           </div>
         </section>
       </div>

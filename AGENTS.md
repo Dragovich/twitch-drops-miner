@@ -167,6 +167,10 @@ embed it and run without a build tool/runtime companion. Production builds never
   Literal ignore substrings cascade through dependents while retaining shared prerequisites.
   Zero-minute subscription rewards are omitted from Campaigns/Up next; expired drops leave
   the queue without hiding upcoming or sequential rewards. Ignore/skip is never completion.
+  Up next omits rewards whose confirmed watch time is complete, even before a claim; estimates
+  cannot remove them. This display rule never claims rewards, unlocks prerequisites or stops
+  background claim/reconciliation work. Campaign details retain their real claim state and
+  the existing game-account connection action.
 - Active campaigns with existing progress appear first. Campaign completion requires all watch rewards
   claimed; expiry alone never qualifies. Persistent completion archives are display-only,
   survive cache clears, and can be invalidated by newer contradictory account evidence or
@@ -214,8 +218,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   the owned, bounded game-query queue and generation cancellation through HTTP and native IPC.
   Search only while the manual picker is open; debounce and cancel superseded requests. Keep
   exact-login/URL submission available when search misses a channel or fails. Search results
-  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker,
-  Channels and Now mining, with a fallback for missing art; never persist this metadata.
+  do not expand mining subscriptions. Validate Twitch CDN avatars and show them in the picker
+  and Channels, with a fallback for missing art; never persist this metadata.
   Manual selection accepts an existing offline identity and waits for it to go live. Watching
   requires a live identity, not catalog coverage, selected games, a drops tag or local reward eligibility. Do not persist game selections or fabricate reward progress.
   Direct lookup and manual stream refresh use a short best-effort metadata attempt;
@@ -570,8 +574,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   Now mining uses 24px vertical/20px horizontal desktop padding and 16px phone padding.
   Header-to-reward and reward-to-progress gaps are 20px desktop/16px phone, with an 88px
   contained reward thumbnail centered beside its text with a 16px desktop/12px phone gap.
-  Streamer avatars in Now mining are 32px, including manual watching and offline waiting.
-  In Watching text, only the streamer name links to their Twitch channel using the login.
+  Now mining omits streamer avatars, including manual watching and offline waiting. Retain
+  Watching text, with only the streamer name linking to their Twitch channel using the login.
   Keep the 6px progress track and 8px count gap. Group the manual selection label, return-to-auto action and timer
   in the Now mining header, including pending lookups, preserving phone hit targets.
   Do not add a separate manual-controls footer below reward progress. Its empty state adds 20px vertical padding.
@@ -584,8 +588,21 @@ embed it and run without a build tool/runtime companion. Production builds never
   and Campaigns/History list view put the border on the scroll container, not the moving rows.
   Cap these lists at 440px on smaller screens; retain their remaining-height desktop layout.
   Campaign grid cards keep their existing layout. Channels, Up next and game-priority rows
-  retain inset separators and modest 4px scrollbar padding. Up next shows a shared date once only when reward windows
-  match by instant and their upcoming state agrees; retain distinct per-drop dates.
+  retain inset separators and modest 4px scrollbar padding. Up next groups collapse independently.
+  Compact game headers show artwork, name, reward count and a chevron; keep saved order and
+  nearest deadline in the header tooltip and accessible description. Use the shared circular
+  icon-button hover/focus style on the chevron, with the whole heading remaining actionable.
+  Pin each game's header
+  within its own group while scrolling, with bounded name wrapping and scroll padding for keyboard
+  focus. Use a responsive reward grid without nested cards, retaining one column on phones.
+  Keep priority explanations in the campaign link tooltip and full campaign details, without
+  repeating the deadline below it. Expand the first game initially and whenever a different game
+  becomes first; retain manual choices while it stays first and across campaign navigation.
+  Keep this UI state in memory, keyed by game identity and scoped to the account and runtime
+  instance, pruning removed games. Do not change saved priorities or move keyboard focus.
+  Show a shared date once beside the campaign name when space permits, including a single reward;
+  wrap on narrow screens. Share dates only when reward windows match by instant and their
+  upcoming state agrees; retain distinct per-drop dates.
   Channel views may fill missing game artwork from catalog records with the exact same game
   ID. Never change stream identity/eligibility or add network requests for this fallback.
   Channels paginates 25 rows with header chevrons. Search covers the full list and resets the page;
@@ -630,6 +647,17 @@ embed it and run without a build tool/runtime companion. Production builds never
   Telegram credentials never appear in responses; no server-dashboard installer/updater.
 - Campaign details contain rewards and account/campaign links, with no streamer lists or status
   lookups. Streamer browsing and manual Watch actions belong in Mining's existing Channels panel.
+  Omit per-reward progress confirmation timestamps. Rewards with the backend's watch-complete
+  status show that status without a progress bar or minute count; keep unfinished/unknown
+  progress and actual claim timestamps. Watch completion never implies a claim.
+  Omit the redundant Ready to mine subtitle; eligible rewards can already have concurrent
+  confirmed progress. Show Mining only for the active eligible reward, matching both
+  campaign and reward IDs from mining status. Require a connected, logged-in, unpaused watch
+  state; retained progress, idle/offline states and History must never imply active mining.
+  Group game-account status and its Connect/Check action in one wrapping row. Keep the
+  external Twitch campaign link in the detail header, separate from account linking.
+  Place the concise priority reason beside the campaign dates without repeating its deadline;
+  retain that deadline in the tooltip and omit the redundant list of priority-target rewards.
 - Campaigns starts with Settings-style Available/History icon tabs and the campaign count
   immediately left of refresh on the right. Show matching/total counts when filtering either tab;
   otherwise show the total. Match Last confirmed's

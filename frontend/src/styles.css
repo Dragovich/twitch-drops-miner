@@ -269,7 +269,8 @@
   padding: 12px 16px;
   background: transparent;
 }
-.campaign-open:focus-visible {
+.campaign-open:focus-visible,
+.up-next-toggle:focus-visible {
   background: transparent;
 }
 .campaign-open:focus-visible .campaign-title {
