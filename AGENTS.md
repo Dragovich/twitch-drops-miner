@@ -573,6 +573,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   the Popover API. Search only while open and cancel/fence late replies on close.
   Close after an accepted selection; failed requests retain the picker and edits. Keep later
   lookup errors visible in Channels when closed, and beside the input when reopened.
+  Preserve error-row space while the picker is open. Picker selection, row Watch and return-to-auto
+  share HTTP busy/error state; accepted pending lookups remain cancellable with return-to-auto.
   Manual lookup has no preparing message; use a play-circle icon submit button with the Mine
   accessible name/tooltip, preserving its busy/disabled state, inline
   errors and return-to-auto control while a lookup is pending.

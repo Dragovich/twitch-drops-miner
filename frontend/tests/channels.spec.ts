@@ -423,6 +423,16 @@ test('closing a channel picker fences late search results and preserves failed s
   await expect(
     page.getByRole('region', { name: 'Channels', exact: true }).getByRole('alert'),
   ).toBeVisible();
+  const list = page.getByRole('region', { name: 'Channels', exact: true });
+  const before = await list.locator('.row').first().boundingBox();
+  await entry.click();
+  await expect(popup.getByRole('alert')).toBeVisible();
+  expect(await list.locator('.row').first().boundingBox()).toEqual(before);
+  await page.keyboard.press('Escape');
+  expect(await list.locator('.row').first().boundingBox()).toEqual(before);
+  await page.unroute('**/api/channels/select');
+  await list.getByRole('button', { name: 'Watch Streamer 1', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('an accepted selection cannot close a reopened picker', async ({ page }) => {
@@ -453,4 +463,62 @@ test('an accepted selection cannot close a reopened picker', async ({ page }) =>
   await expect(input).toBeEnabled();
   await expect(popup).toBeVisible();
   await expect(input).toHaveValue('extra_streamer');
+});
+
+test('manual controls serialize HTTP commands but allow exiting an accepted pending lookup', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/');
+  const list = page.getByRole('region', { name: 'Channels', exact: true });
+  await list.getByRole('button', { name: 'Watch Streamer 1', exact: true }).click();
+  const back = page.getByRole('button', { name: 'Return to Auto Mode' });
+  await expect(back).toBeEnabled();
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route('**/api/channels/select', async (route) => {
+    await gate;
+    await route.fulfill({ json: { ok: true } });
+  });
+  const entry = page.getByRole('button', { name: 'Mine channel', exact: true });
+  await entry.click();
+  const input = page.getByRole('combobox', { name: 'Twitch channel name or URL' });
+  await input.fill('extra_streamer');
+  const sent = page.waitForRequest('**/api/channels/select');
+  await input.press('Enter');
+  await sent;
+  await expect(back).toBeDisabled();
+  await expect(list.getByRole('button', { name: 'Watch Streamer 2', exact: true })).toBeDisabled();
+  await request.post('/__test/event', {
+    headers,
+    data: {
+      event: 'manual_mode_update',
+      data: {
+        ...fixture.manual_mode,
+        active: true,
+        channel_id: 1,
+        pending_channel: 'extra_streamer',
+      },
+    },
+  });
+  release();
+  await expect(back).toBeEnabled();
+  await back.click();
+  await expect(page.getByRole('img', { name: 'Automatic selection', exact: true })).toBeVisible();
+
+  let releaseRow!: () => void;
+  const rowGate = new Promise<void>((done) => {
+    releaseRow = done;
+  });
+  await page.route('**/api/channels/select', async (route) => {
+    await rowGate;
+    await route.continue();
+  });
+  await list.getByRole('button', { name: 'Watch Streamer 2', exact: true }).click();
+  await entry.click();
+  await expect(input).toBeDisabled();
+  releaseRow();
+  await expect(input).toBeEnabled();
 });

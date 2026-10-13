@@ -25,7 +25,6 @@ import {
   Search,
   Notice,
   useAction,
-  ActionResult,
   dateTime,
   ConfirmedTime,
 } from '../../shared/ui/index';
@@ -57,7 +56,6 @@ export default function Mining() {
   }
   const [enterChannel, setEnterChannel] = useState(false);
   const action = useAction();
-  const channelAction = useAction();
   if (!data) return <Empty title={t('loading')} />;
   if (edit) return <MiningPreferences />;
   const progress = data.current_drop;
@@ -101,7 +99,6 @@ export default function Mining() {
         <h1 className="text-[22px] font-semibold">{t('mining')}</h1>
         <InventoryRefreshButton />
       </header>
-      <ActionResult action={action} />
       <section className="panel shrink-0 p-4 md:px-5 md:py-6" aria-labelledby="mining-heading">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:mb-5">
           <h2 id="mining-heading" className="section-title">
@@ -282,11 +279,7 @@ export default function Mining() {
                     />
                   </nav>
                 )}
-                <ChannelPicker
-                  open={enterChannel}
-                  onOpenChange={setEnterChannel}
-                  action={channelAction}
-                />
+                <ChannelPicker open={enterChannel} onOpenChange={setEnterChannel} action={action} />
               </div>
             </div>
             <Search value={search} onChange={setSearch} label={t('search_channels')} />
@@ -300,9 +293,9 @@ export default function Mining() {
             aria-labelledby="channels-heading"
             tabIndex={0}
           >
-            {!enterChannel && (channelAction.error || data.manual_mode.error) && (
-              <div className="p-4">
-                <Notice error>{channelAction.error || data.manual_mode.error}</Notice>
+            {(action.error || data.manual_mode.error) && (
+              <div className={`p-4 ${enterChannel ? 'invisible' : ''}`} aria-hidden={enterChannel}>
+                <Notice error>{action.error || data.manual_mode.error}</Notice>
               </div>
             )}
             {channels.slice(channelPage * 25, (channelPage + 1) * 25).map((channel) => (
