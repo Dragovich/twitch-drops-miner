@@ -291,8 +291,8 @@ test('long queues use compact headers and reward columns while retaining context
     await expect(first.getByText('6 rewards', { exact: true })).toBeVisible();
     await expect(queue.getByText(/^Saved #/).first()).not.toBeInViewport();
     const campaignLink = queue.getByRole('link', { name: 'EXFIL Brothers Day 5', exact: true });
-    await expect(campaignLink).toHaveAttribute('title', /^Short event first:/);
-    await expect(queue.getByText(/^Short event first/)).toHaveCount(0);
+    await expect(campaignLink).toHaveAttribute('title', /^Short event prio:/);
+    await expect(queue.getByText(/^Short event prio/)).toHaveCount(0);
     const rewards = queue.locator('li:visible');
     const a = (await rewards.nth(0).boundingBox())!;
     const b = (await rewards.nth(1).boundingBox())!;

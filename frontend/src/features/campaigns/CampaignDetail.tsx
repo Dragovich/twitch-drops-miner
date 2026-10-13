@@ -194,26 +194,6 @@ export function CampaignDetail({
                   </a>
                 )}
               </div>
-              {!!priority?.target_ids.length && (
-                <div className="flex flex-wrap gap-x-2 gap-y-1">
-                  <span className="text-muted">{t('priority_targets')}</span>
-                  {priority.target_ids.map((id) => {
-                    const target = campaign.drops.find((drop) => drop.id === id);
-                    return (
-                      target && (
-                        <button
-                          type="button"
-                          className="text-link"
-                          key={id}
-                          onClick={() => selectDrop(id)}
-                        >
-                          {target.name}
-                        </button>
-                      )
-                    );
-                  })}
-                </div>
-              )}
             </div>
             <div className="divide-y divide-divider">
               {campaign.drops.map((drop) => {

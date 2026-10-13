@@ -621,7 +621,7 @@ embed it and run without a build tool/runtime companion. Production builds never
   Group game-account status and its Connect/Check action in one wrapping row. Keep the
   external Twitch campaign link in the detail header, separate from account linking.
   Place the concise priority reason beside the campaign dates without repeating its deadline;
-  retain that deadline in the tooltip and the actual priority-target reward links below.
+  retain that deadline in the tooltip and omit the redundant list of priority-target rewards.
 - Campaigns starts with Settings-style Available/History icon tabs and the total campaign count
   immediately left of refresh on the right. Omit the filtered count; match Last confirmed's
   12px/#888888 text. Keep the page heading screen-reader-only. Clear filters stays beside All games

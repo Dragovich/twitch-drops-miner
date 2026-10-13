@@ -581,7 +581,7 @@ test('campaign details group account actions and keep campaign context by the he
   const campaignLink = detail.getByRole('link', { name: 'Open campaign on Twitch' });
   const connect = detail.getByRole('link', { name: 'Connect game account', exact: true });
   const account = detail.getByText('Game account not linked', { exact: true });
-  const priority = detail.getByText('Short event first', { exact: true });
+  const priority = detail.getByText('Short event prio', { exact: true });
   await expect(detail.locator('header').getByRole('link')).toHaveCount(1);
   await expect(campaignLink).toHaveAttribute('href', campaign.campaign_url);
   await expect(connect).toHaveText('Connect');
@@ -589,7 +589,9 @@ test('campaign details group account actions and keep campaign context by the he
   await expect(account.locator('..').getByRole('link')).toHaveCount(1);
   await expect(priority).toBeVisible();
   await expect(priority.locator('..').getByText(/ — /)).toHaveCount(1);
-  await expect(detail.getByText(/^Short event first:/)).toHaveCount(0);
+  await expect(detail.getByText(/^Short event prio:/)).toHaveCount(0);
+  await expect(detail.getByText('Prioritizing', { exact: true })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: 'Trail companion', exact: true })).toHaveCount(0);
   for (const width of [1920, 1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(campaignLink).toBeInViewport();
@@ -605,9 +607,9 @@ test('campaign details group account actions and keep campaign context by the he
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await detail.screenshot({ path: `../artifacts/campaign-detail-clean-${width}.png` });
   }
-  await detail.getByRole('button', { name: 'Trail companion', exact: true }).click();
-  await expect(page).toHaveURL(/drop=reward-2/);
-  await expect(detail.locator('#drop-reward-2')).toHaveAttribute('aria-current', 'true');
+  await detail.getByRole('button', { name: 'Explorer jacket', exact: true }).click();
+  await expect(page).toHaveURL(/drop=reward-1/);
+  await expect(detail.locator('#drop-reward-1')).toHaveAttribute('aria-current', 'true');
   campaign.linked = null;
   await publish();
   await expect(connect).toHaveCount(0);
@@ -1520,6 +1522,8 @@ test('switching details closes back to the list and live updates preserve reward
       ...first.drops[0]!,
       id: `second-${index}`,
       name: `Reward ${index}`,
+      eligibility: index === 11 ? 'prerequisite' : 'ready',
+      prerequisites: index === 11 ? ['second-10'] : [],
     })),
   };
   await request.post('/__test/event', {
@@ -1529,7 +1533,8 @@ test('switching details closes back to the list and live updates preserve reward
   await page.goto('/campaigns?view=list');
   await page.getByRole('button', { name: 'Open Autumn expedition', exact: true }).click();
   await page.getByRole('button', { name: 'Open Second campaign', exact: true }).click();
-  await expect(page.getByText('Prioritizing', { exact: true })).toBeVisible();
+  await expect(page.getByText('Earliest reward deadline', { exact: true })).toBeVisible();
+  await expect(page.getByText('Prioritizing', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Reward 10', exact: true }).click();
   await expect(page).toHaveURL(/drop=second-10/);
   await page.getByRole('button', { name: 'Close details' }).click();
