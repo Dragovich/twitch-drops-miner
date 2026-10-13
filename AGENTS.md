@@ -445,6 +445,8 @@ embed it and run without a build tool/runtime companion. Production builds never
   History shows Games only. Bound both overlays to the viewport, support older webviews,
   and retain keyboard access, outside dismissal and Escape focus return. Keep touch-button
   focus inside each overlay so All games and Clear filters work on the first tap.
+  Both action footers have a divider. Keep Games compact; let Filters fit its contents
+  within the available viewport, scrolling its options only when space is limited.
   Hide selected games defaults false when absent and affects Available display only, using
   the same folded game selection as Mine. Remember the filter, preserve History and direct
   detail links, and recover focus/pagination when selecting a game removes its cards.

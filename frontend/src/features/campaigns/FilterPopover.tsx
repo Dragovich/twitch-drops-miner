@@ -7,6 +7,7 @@ export default function FilterPopover({
   open,
   active = false,
   count,
+  maxHeight = Infinity,
   onToggle,
   onClose,
   children,
@@ -16,6 +17,7 @@ export default function FilterPopover({
   open: boolean;
   active?: boolean;
   count?: number;
+  maxHeight?: number;
   onToggle: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -43,7 +45,7 @@ export default function FilterPopover({
     Object.assign(popup.current!.style, {
       left: `${Math.max(left, Math.min(anchor.right - width, right - width))}px`,
       width: `${width}px`,
-      maxHeight: `${Math.min(360, upward ? above : below)}px`,
+      maxHeight: `${Math.min(maxHeight, upward ? above : below)}px`,
       top: `${upward ? anchor.top - 4 : anchor.bottom + 4}px`,
       transform: upward ? 'translateY(-100%)' : '',
     });
@@ -93,7 +95,7 @@ export default function FilterPopover({
       window.visualViewport?.removeEventListener('resize', position);
       window.visualViewport?.removeEventListener('scroll', position);
     };
-  }, [open, onClose]);
+  }, [open, onClose, maxHeight]);
 
   return (
     <>

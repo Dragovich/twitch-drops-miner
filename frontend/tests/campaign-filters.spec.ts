@@ -77,11 +77,11 @@ test.describe('phone game filters', () => {
   }
 });
 
-for (const [width, height, fallback] of [
-  [1440, 900, false],
-  [1280, 360, false],
-  [390, 844, false],
-  [320, 640, true],
+for (const [width, height, fallback, filtersScroll] of [
+  [1440, 900, false, false],
+  [1280, 360, false, true],
+  [390, 844, false, false],
+  [320, 640, true, true],
 ] as const) {
   test(`campaign popovers overlay stationary results at ${width}px${fallback ? ' without native popovers' : ''}`, async ({
     page,
@@ -130,6 +130,7 @@ for (const [width, height, fallback] of [
       false,
     );
     expect(await results.evaluate((element) => element.scrollTop)).toBe(scroll);
+    await page.screenshot({ path: `../artifacts/campaign-games-${width}.png` });
     await popup.getByRole('searchbox').fill('Game 59');
     await expect(popup.getByRole('checkbox')).toHaveCount(1);
     await popup.getByRole('checkbox').check();
@@ -147,6 +148,18 @@ for (const [width, height, fallback] of [
     await expect(popup).toBeHidden();
     const filters = page.getByRole('group', { name: 'Filters', exact: true });
     await expect(filters.getByRole('checkbox', { name: 'Hide selected games' })).toBeVisible();
+    const filterList = filters.locator(':scope > div').first();
+    expect(
+      await filterList.evaluate((element) => element.scrollHeight > element.clientHeight),
+    ).toBe(filtersScroll);
+    const filterBounds = (await filters.boundingBox())!;
+    expect(filterBounds.y).toBeGreaterThanOrEqual(8);
+    expect(filterBounds.y + filterBounds.height).toBeLessThanOrEqual(height - 8);
+    await filters.getByRole('checkbox').last().scrollIntoViewIfNeeded();
+    await expect(filters.getByRole('checkbox').last()).toBeInViewport();
+    await expect(
+      filters.getByRole('button', { name: 'Clear filters', exact: true }),
+    ).toBeInViewport();
     expect(await results.boundingBox()).toEqual(before);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({ path: `../artifacts/campaign-filters-${width}.png` });

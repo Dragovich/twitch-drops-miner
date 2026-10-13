@@ -308,6 +308,7 @@ export default function Campaigns() {
             <FilterPopover
               icon={mdiGamepadVariantOutline}
               label={t('games')}
+              maxHeight={360}
               count={filters.game_name_search.length}
               active={!!filters.game_name_search.length}
               open={popover === 'games'}
@@ -351,7 +352,7 @@ export default function Campaigns() {
                   game.toLocaleLowerCase().includes(gameSearch.trim().toLocaleLowerCase()),
                 ) && <p className="muted py-2">{t('no_matches')}</p>}
               </div>
-              <div className="shrink-0 p-3">
+              <div className="shrink-0 border-t border-divider p-3">
                 <Button
                   disabled={!connected || settingsBusy || !filters.game_name_search.length}
                   onClick={() => changeFilters({ ...filters, game_name_search: [] })}
