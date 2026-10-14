@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::dto::Snapshot;
+use crate::{config::Language, dto::Snapshot};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -44,6 +44,16 @@ pub struct ActivityEvent {
 
 impl ActivityEvent {
     pub fn new(code: &str, category: Category, severity: Severity, args: &[(&str, &str)]) -> Self {
+        Self::new_in(Language::En, code, category, severity, args)
+    }
+
+    pub fn new_in(
+        language: Language,
+        code: &str,
+        category: Category,
+        severity: Severity,
+        args: &[(&str, &str)],
+    ) -> Self {
         let now = Utc::now();
         Self {
             id: 0,
@@ -56,7 +66,7 @@ impl ActivityEvent {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
-            message: super::message(code, args),
+            message: super::message_in(language, code, args),
             campaign_id: None,
             drop_id: None,
             channel_id: None,

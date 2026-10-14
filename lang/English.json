@@ -27,8 +27,10 @@
         "menu_status": "Show mining status and confirmed progress",
         "menu_pause": "Pause watching; automatic claims continue",
         "menu_resume": "Resume watching",
-        "menu_mine": "Add a game to automatic mining: /mine Rust",
-        "menu_help": "Show commands"
+            "menu_mine": "Add a game to automatic mining: /mine Rust",
+            "menu_help": "Show commands",
+            "claim_title": "Drop claimed",
+            "claim_reward": "Reward"
     },
     "login": {
         "status": {
@@ -172,6 +174,10 @@
             "access": "Dashboard access",
             "maintenance": "Maintenance",
             "interface": "Interface",
+            "language": "Language",
+            "language_help": "Choose the dashboard language. Server messages, activity and Telegram replies follow the saved choice.",
+            "language_english": "English",
+            "language_russian": "Русский",
             "loading": "Loading…",
             "saving": "Saving…",
             "cancel": "Cancel",

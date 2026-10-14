@@ -5,7 +5,7 @@ pub mod projection;
 pub mod state;
 
 use crate::{
-    config::Settings,
+    config::{Language, Settings},
     dto::{RefreshState, SettingsView, Snapshot},
     random_hex,
     store::{CampaignArchive, DataDirectory, History},
@@ -28,8 +28,20 @@ pub static ENGLISH: LazyLock<Value> = LazyLock::new(|| {
         .expect("valid English catalog")
 });
 
-pub fn message(path: &str, replacements: &[(&str, &str)]) -> String {
-    let mut value = &*ENGLISH;
+pub static RUSSIAN: LazyLock<Value> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../../../../lang/Russian.json"))
+        .expect("valid Russian catalog")
+});
+
+pub fn catalog(language: Language) -> &'static Value {
+    match language {
+        Language::En => &ENGLISH,
+        Language::Ru => &RUSSIAN,
+    }
+}
+
+pub fn message_in(language: Language, path: &str, replacements: &[(&str, &str)]) -> String {
+    let mut value = catalog(language);
     for key in path.split('.') {
         value = &value[key];
     }
@@ -38,6 +50,10 @@ pub fn message(path: &str, replacements: &[(&str, &str)]) -> String {
         result = result.replace(&format!("{{{key}}}"), value);
     }
     result
+}
+
+pub fn message(path: &str, replacements: &[(&str, &str)]) -> String {
+    message_in(Language::En, path, replacements)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -105,6 +121,14 @@ impl Application {
         ))
     }
 
+    pub async fn language(&self) -> Language {
+        self.settings.read().await.language
+    }
+
+    pub async fn text(&self, code: &str, args: &[(&str, &str)]) -> String {
+        message_in(self.language().await, code, args)
+    }
+
     pub async fn command(&self, command: Command) -> Result<(), AppError> {
         if self.shutdown.is_cancelled() {
             return Err(AppError::ShuttingDown);
@@ -168,7 +192,7 @@ impl Application {
                         owned
                             .finish_inventory_refresh(
                                 sequence,
-                                Some(message("gui.auth.request_failed", &[])),
+                                Some(owned.text("gui.auth.request_failed", &[]).await),
                             )
                             .await;
                     }
@@ -214,7 +238,13 @@ impl Application {
             "status.catalog_unavailable" => (Category::Inventory, Severity::Warning),
             _ => (Category::Mining, Severity::Info),
         };
-        let mut event = ActivityEvent::new(code, category, severity, args);
+        let mut event = ActivityEvent::new_in(
+            self.settings.read().await.language,
+            code,
+            category,
+            severity,
+            args,
+        );
         if code == "status.catalog_unavailable" {
             event.args.insert("operation".into(), "inventory".into());
         }
@@ -258,12 +288,13 @@ impl Application {
 
     pub fn notify_claimed(
         &self,
+        language: Language,
         account: u64,
         campaign: &crate::domain::Campaign,
         drop: &crate::domain::Drop,
     ) {
         let _ = self.notifications.send(Notification {
-            title: message("gui.backend.drop_claimed", &[]),
+            title: message_in(language, "gui.backend.drop_claimed", &[]),
             message: drop.name.clone(),
             claim: Some(crate::notifications::Claim {
                 account,
@@ -297,6 +328,22 @@ impl Application {
             .map_err(|_| AppError::Unavailable)?;
         *self.settings.write().await = next.clone();
         let mut state = self.snapshot.write().await;
+        if current.values.language != next.language {
+            // Retranslate stored activity so the log follows the saved language.
+            // Free-text console entries keep their original wording.
+            for event in &mut state.activity {
+                if event.code == "status.message" {
+                    continue;
+                }
+                let code = event.code.clone();
+                let args: Vec<(&str, &str)> = event
+                    .args
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_str()))
+                    .collect();
+                event.message = message_in(next.language, &code, &args);
+            }
+        }
         state.settings.values = next;
         state.settings.revision = revision;
         state.settings.refresh_game_keys();

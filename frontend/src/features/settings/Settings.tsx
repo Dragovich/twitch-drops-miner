@@ -17,6 +17,7 @@ import {
   mdiWrenchOutline,
   mdiMonitor,
   mdiBellOutline,
+  mdiTranslate,
 } from '@mdi/js';
 import type {
   AuthStatus,
@@ -237,6 +238,7 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
     [
       'account',
       isDesktop() ? 'desktop' : 'access',
+      'interface',
       'connection',
       'notifications',
       'maintenance',
@@ -295,6 +297,7 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
           [
             ['account', mdiAccountOutline],
             isDesktop() ? ['desktop', mdiMonitor] : ['access', mdiShieldLockOutline],
+            ['interface', mdiTranslate],
             ['connection', mdiLanConnect],
             ['notifications', mdiBellOutline],
             ['maintenance', mdiWrenchOutline],
@@ -447,6 +450,22 @@ function SettingsContent({ settings, auth }: { settings: SettingsData; auth: Aut
           </Section>
         </fieldset>
       </form>
+      <Section hidden={section !== 'interface'} id="interface">
+        <div className="grid max-w-md gap-4">
+          <Field label={t('language')} help={t('language_help')}>
+            <select
+              className="field"
+              value={draft.language ?? 'en'}
+              disabled={!connected}
+              onChange={(event) => change('language', event.target.value === 'ru' ? 'ru' : 'en')}
+            >
+              <option value="en">{t('language_english')}</option>
+              <option value="ru">{t('language_russian')}</option>
+            </select>
+          </Field>
+          <p className="muted">{t('autosave_help')}</p>
+        </div>
+      </Section>
       {isDesktop() ? (
         <Section hidden={section !== 'desktop'} id="desktop">
           <DesktopSettings />

@@ -78,12 +78,47 @@ pub enum MiningPriorityMode {
     EndingSoonest,
 }
 
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    #[default]
+    En,
+    Ru,
+}
+
+impl Language {
+    /// Best-effort match of a BCP 47 tag or bare code; anything else stays English.
+    /// Compares at most three leading characters, so hostile input cannot panic
+    /// on a UTF-8 boundary or force a large allocation.
+    pub fn from_code(value: &str) -> Self {
+        let mut chars = value.trim().chars().flat_map(|c| c.to_lowercase());
+        match (chars.next(), chars.next(), chars.next()) {
+            (Some('r'), Some('u'), None) => Self::Ru,
+            (Some('r'), Some('u'), Some(sep)) if sep == '-' || sep == '_' => Self::Ru,
+            _ => Self::En,
+        }
+    }
+
+    pub fn from_accept_language(header: &str) -> Self {
+        // Only the highest-priority tag matters for the login screen.
+        let tag = header
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .split(';')
+            .next()
+            .unwrap_or("");
+        Self::from_code(tag)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Settings {
     pub games_to_watch: Vec<String>,
     pub game_metadata: Vec<GameMetadata>,
     pub mining_paused: bool,
+    pub language: Language,
     pub auto_claim_drops: bool,
     pub show_progress_percentage: bool,
     pub mining_priority_mode: MiningPriorityMode,
@@ -104,6 +139,7 @@ impl Default for Settings {
             games_to_watch: vec![],
             game_metadata: vec![],
             mining_paused: false,
+            language: Language::default(),
             auto_claim_drops: true,
             show_progress_percentage: false,
             mining_priority_mode: MiningPriorityMode::Manual,
@@ -310,6 +346,49 @@ mod tests {
     }
 
     #[test]
+    fn language_defaults_to_english_round_trips_and_rejects_unknown() {
+        let original = Settings::from_saved(json!({"games_to_watch":["Rust"]})).unwrap();
+        assert_eq!(original.language, Language::En);
+        assert_eq!(serde_json::to_value(&original).unwrap()["language"], "en");
+        let russian = original.patched(&json!({"language":"ru"})).unwrap();
+        assert_eq!(russian.language, Language::Ru);
+        assert_eq!(russian.games_to_watch, ["Rust"]);
+        let encoded = serde_json::to_value(&russian).unwrap();
+        assert!(Settings::from_saved(encoded).unwrap() == russian);
+        assert_eq!(
+            russian.patched(&json!({"language":"en"})).unwrap().language,
+            Language::En
+        );
+        for invalid in [json!("de"), json!(""), json!(true), json!(1)] {
+            assert!(original.patched(&json!({"language":invalid})).is_err());
+            assert!(Settings::from_saved(json!({"language":invalid})).is_err());
+        }
+    }
+
+    #[test]
+    fn language_tags_match_russian_and_fall_back_to_english() {
+        for tag in ["ru", "RU", " ru-RU ", "ru_RU", "ru-RU,ru;q=0.9,en;q=0.8"] {
+            assert_eq!(Language::from_code(tag), Language::Ru);
+        }
+        for tag in ["", "en", "en-US", "de", "rus", "rux", "fr;q=0.9"] {
+            assert_eq!(Language::from_code(tag), Language::En);
+        }
+        // Hostile multibyte input must not panic on a UTF-8 boundary.
+        for tag in ["русский язык интерфейса", "ру", "rü", "r\u{301}u"] {
+            assert_eq!(Language::from_code(tag), Language::En);
+        }
+        assert_eq!(
+            Language::from_accept_language("ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"),
+            Language::Ru
+        );
+        assert_eq!(
+            Language::from_accept_language("en-US,en;q=0.9"),
+            Language::En
+        );
+        assert_eq!(Language::from_accept_language(""), Language::En);
+    }
+
+    #[test]
     fn pause_defaults_off_and_survives_settings_updates_and_reload() {
         let original = Settings::from_saved(json!({"games_to_watch":["Rust"]})).unwrap();
         assert!(!original.mining_paused);
@@ -512,7 +591,7 @@ mod tests {
     #[test]
     fn unknown_saved_fields_never_reach_serialization() {
         let settings = Settings::from_saved(json!({
-            "language": "old", "dark_mode": true,
+            "theme": "dark", "dark_mode": true,
             "telegram_bot_token": "secret", "telegram_chat_id": "123",
             "games_to_watch": ["Rust"]
         }))
@@ -520,7 +599,7 @@ mod tests {
         let encoded = serde_json::to_string(&settings).unwrap();
         assert!(!encoded.contains("secret"));
         assert!(!encoded.contains("telegram"));
-        assert!(!encoded.contains("language"));
+        assert!(!encoded.contains("theme"));
         assert!(settings.selected("Rust"));
     }
 

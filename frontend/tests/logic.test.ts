@@ -7,7 +7,7 @@ import { groupHistory, matchesHistory, historyOrder } from '../src/features/camp
 import type { HistoryEntry, Snapshot } from '../src/shared/lib/types';
 const snapshot: Snapshot = {
   ...(fixture as Snapshot),
-  settings: { ...fixture.settings, mining_priority_mode: 'manual' },
+  settings: { ...fixture.settings, mining_priority_mode: 'manual', language: 'en' },
 };
 it('orders active confirmed progress before other available campaigns', () => {
   const progress = snapshot.campaigns[0]!;

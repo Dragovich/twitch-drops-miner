@@ -2,7 +2,7 @@ import { isDesktop } from '../shared/lib/platform';
 import { createContext, useContext, useEffect, useReducer, useRef, type ReactNode } from 'react';
 import type { Snapshot } from '../shared/lib/types';
 import { connectBrowser, type Subscription } from './transport';
-import { I18n } from '../shared/lib/i18n';
+import { I18n, resolveLanguage, storeLanguage, storedLanguage } from '../shared/lib/i18n';
 import { useAutosave } from './useAutosave';
 import { initialState, reducer } from './reducer';
 
@@ -34,6 +34,12 @@ export function MinerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (state.resync) transport.current?.resync();
   }, [state.resync]);
+  const savedLanguage = state.data?.settings.language;
+  const language = savedLanguage ? resolveLanguage(savedLanguage) : storedLanguage();
+  useEffect(() => {
+    // The saved setting is authoritative once snapshots arrive.
+    if (savedLanguage) storeLanguage(resolveLanguage(savedLanguage));
+  }, [savedLanguage]);
   useEffect(() => {
     let disposed = false;
     const start = async () => {
@@ -60,7 +66,7 @@ export function MinerProvider({ children }: { children: ReactNode }) {
         autosave,
       }}
     >
-      <I18n>{children}</I18n>
+      <I18n language={language}>{children}</I18n>
     </Context>
   );
 }

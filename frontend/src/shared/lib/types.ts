@@ -94,6 +94,7 @@ export interface Settings {
   revision?: string;
   games_to_watch: string[];
   mining_paused: boolean;
+  language: 'en' | 'ru';
   auto_claim_drops: boolean;
   show_progress_percentage: boolean;
   mining_priority_mode: 'manual' | 'short_events' | 'ending_soonest';

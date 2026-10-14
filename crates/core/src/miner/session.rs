@@ -142,7 +142,7 @@ impl Miner {
                             Ok(Err(TwitchError::Cancelled))|Ok(Ok(()))=>restarts.reset(),
                             Ok(Err(error))=>{
                                 let sequence=self.app.snapshot.read().await.inventory_refresh.sequence;
-                                self.app.finish_inventory_refresh(sequence,Some(message("gui.redesign.refresh_failed_detail",&[]))).await;
+                                self.app.finish_inventory_refresh(sequence,Some(self.app.text("gui.redesign.refresh_failed_detail",&[]).await)).await;
                                 self.app.activity("gui.backend.twitch_error",&[("error",&error.to_string())]).await;
                                 delay=restarts.delay(Instant::now().saturating_duration_since(started));
                             },
@@ -227,7 +227,8 @@ pub(super) async fn publish_login(app: &App, mut login: Login) {
     }
     if login.user_id.is_some() {
         use crate::app::activity::{self, ActivityEvent, Category, Severity};
-        let mut recovery = ActivityEvent::new(
+        let mut recovery = ActivityEvent::new_in(
+            app.settings.read().await.language,
             "gui.backend.twitch_error",
             Category::Connection,
             Severity::Info,
@@ -255,7 +256,7 @@ pub(super) async fn reset_session(app: &App) {
             ..Default::default()
         };
         state.login = Login {
-            status: message("login.status.logged_out", &[]),
+            status: app.text("login.status.logged_out", &[]).await,
             ..Login::default()
         };
         state.campaigns = archived;
@@ -293,14 +294,15 @@ pub(super) async fn authenticate(
                 publish_login(
                     app,
                     Login {
-                        status: message("login.status.waiting_auth", &[]),
+                        status: message_in(settings.language, "login.status.waiting_auth", &[]),
                         user_id: None,
                         oauth_pending: Some(login.code.clone()),
                         ..Login::default()
                     },
                 )
                 .await;
-                app.status(message("login.status.required", &[])).await;
+                app.status(app.text("login.status.required", &[]).await)
+                    .await;
                 let session = login.finish(confirmed).await?;
                 save_session(app, &session).await?;
                 return Ok((TwitchClient::new(http, &session), session));
@@ -321,7 +323,7 @@ pub(super) async fn authenticate(
                 publish_login(
                     app,
                     Login {
-                        status: message("login.status.required", &[]),
+                        status: message_in(settings.language, "login.status.required", &[]),
                         ..Login::default()
                     },
                 )
@@ -363,7 +365,7 @@ pub(super) async fn run_generation(
     publish_login(
         &app,
         Login {
-            status: message("login.status.logged_in", &[]),
+            status: message_in(settings.language, "login.status.logged_in", &[]),
             user_id: Some(session.user_id),
             oauth_pending: None,
             ..Login::default()

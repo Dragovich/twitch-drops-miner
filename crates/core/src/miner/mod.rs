@@ -20,7 +20,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    app::{Application as App, Command, CommandRequest, message},
+    app::{Application as App, Command, CommandRequest, message_in},
     config::Settings,
     domain::{Campaign, Channel, Drop, MAX_ESTIMATED_MINUTES, wanted_items},
     dto::{InventoryStatus, Login, ManualMode, RefreshState},
@@ -428,7 +428,8 @@ impl Mining {
                 .minimum_refresh_interval_minutes;
             self.next_refresh = self.last_inventory + Duration::from_secs(u64::from(minutes) * 60);
         }
-        self.apply_manual(&intent);
+        let language = self.app.settings.read().await.language;
+        self.apply_manual(&intent, language);
         let manual_revision = self.seen.manual_revision;
         self.seen = intent;
         self.seen.manual_revision = manual_revision;
@@ -626,7 +627,11 @@ impl Mining {
             let (refresh_sequence, _) = self.app.begin_inventory_refresh().await;
             let client = self.client.clone();
             self.app
-                .status(message("gui.status.fetching_inventory", &[]))
+                .status(message_in(
+                    settings.language,
+                    "gui.status.fetching_inventory",
+                    &[],
+                ))
                 .await;
             self.spawn(JobKind::Inventory, async move {
                 let requested_at = Utc::now();
@@ -651,7 +656,9 @@ impl Mining {
                         == self.watching.or(self.manual.map(|manual| manual.channel))
                 })
                 .cloned();
-            self.app.status(message("gui.status.gathering", &[])).await;
+            self.app
+                .status(message_in(settings.language, "gui.status.gathering", &[]))
+                .await;
             self.spawn(JobKind::Channels, async move {
                 Job::Channels {
                     requested_at: Instant::now(),
@@ -734,7 +741,8 @@ impl Mining {
                 result.is_ok(),
             ),
         };
-        let mut activity = ActivityEvent::new(
+        let mut activity = ActivityEvent::new_in(
+            settings.language,
             "gui.backend.twitch_error",
             category,
             Severity::Warning,
@@ -791,7 +799,7 @@ impl Mining {
                     let error = self.finish_manual(result, requested_at, intent.manual_duration);
                     self.lookup = None;
                     self.manual_pending = None;
-                    self.manual_error = error.map(|key| message(key, &[]));
+                    self.manual_error = error.map(|key| message_in(settings.language, key, &[]));
                     self.publish = true;
                     pool.set_channels(
                         &self
@@ -901,8 +909,9 @@ impl Mining {
                     &settings,
                     Some((
                         refresh_sequence,
-                        (!self.status.available)
-                            .then(|| message("gui.redesign.campaigns_unavailable", &[])),
+                        (!self.status.available).then(|| {
+                            message_in(settings.language, "gui.redesign.campaigns_unavailable", &[])
+                        }),
                     )),
                 )
                 .await?;
@@ -924,7 +933,7 @@ impl Mining {
                 self.channels = channels;
                 self.channels_loaded = true;
                 let intent = self.intent.borrow().clone();
-                self.apply_manual(&intent);
+                self.apply_manual(&intent, settings.language);
                 self.channel_events
                     .retain(|id, _| self.channels.iter().any(|c| c.identity.id == *id));
                 self.beacon_events
@@ -1094,7 +1103,8 @@ impl Mining {
                     && let Some(drop) = campaign.drops.iter().find(|d| d.id == id)
                     && announce
                 {
-                    self.app.notify_claimed(self.client.user_id, campaign, drop);
+                    self.app
+                        .notify_claimed(settings.language, self.client.user_id, campaign, drop);
                 }
                 self.claim_retry.remove(&id);
                 self.claim_wait = Some((id, now + Duration::from_secs(4), 0));
@@ -1146,7 +1156,11 @@ impl Mining {
                 self.app
                     .finish_inventory_refresh(
                         refresh_sequence,
-                        Some(message("gui.redesign.refresh_failed_detail", &[])),
+                        Some(message_in(
+                            settings.language,
+                            "gui.redesign.refresh_failed_detail",
+                            &[],
+                        )),
                     )
                     .await;
                 self.refresh = false;
@@ -1171,8 +1185,11 @@ impl Mining {
             if !inventory_failed && !notification && !playback {
                 self.next_retry = now + Duration::from_secs(10);
             }
-            activity.message =
-                message("gui.backend.twitch_error", &[("error", &error.to_string())]);
+            activity.message = message_in(
+                settings.language,
+                "gui.backend.twitch_error",
+                &[("error", &error.to_string())],
+            );
             activity.args.insert("error".into(), error.to_string());
             self.app.record_activity(activity).await;
         } else if succeeded {

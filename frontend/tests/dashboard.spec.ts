@@ -13,7 +13,7 @@ import fixture from './fixture.json' with { type: 'json' };
 import type { Snapshot } from '../src/shared/lib/types';
 const snapshot: Snapshot = {
   ...(fixture as Snapshot),
-  settings: { ...fixture.settings, mining_priority_mode: 'manual' },
+  settings: { ...fixture.settings, mining_priority_mode: 'manual', language: 'en' },
 };
 const headers = { 'X-TDM-Request': '1' };
 

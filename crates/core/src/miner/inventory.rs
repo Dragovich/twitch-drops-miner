@@ -67,7 +67,13 @@ impl Mining {
 
     pub(super) async fn idle_status(&self, settings: &Settings) {
         if settings.mining_paused {
-            self.app.status(message("status.paused", &[])).await;
+            self.app
+                .status(crate::app::message_in(
+                    settings.language,
+                    "status.paused",
+                    &[],
+                ))
+                .await;
             return;
         }
         let key = if settings.games_to_watch.is_empty()
@@ -90,7 +96,7 @@ impl Mining {
         } else {
             "status.no_channel"
         };
-        let text = message(key, &[]);
+        let text = crate::app::message_in(settings.language, key, &[]);
         self.app.status(text.clone()).await;
         self.app.activity(key, &[]).await;
     }

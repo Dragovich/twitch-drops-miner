@@ -114,6 +114,7 @@
   ],
   "settings": {
     "mining_paused": false,
+    "language": "en",
     "auto_claim_drops": true,
     "show_progress_percentage": false,
     "game_metadata": [],

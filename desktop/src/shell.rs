@@ -9,7 +9,7 @@ use tauri::{
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::NotificationExt;
 use twitch_drops_miner_core::{
-    app::{AppError, message},
+    app::{AppError, message, message_in},
     store::atomic_json,
 };
 
@@ -151,7 +151,14 @@ pub async fn desktop_settings(
     })
 }
 
-pub fn install(app: &tauri::AppHandle) -> tauri::Result<MenuItem<tauri::Wry>> {
+pub struct TrayMenu {
+    show: MenuItem<tauri::Wry>,
+    pause: MenuItem<tauri::Wry>,
+    updates: MenuItem<tauri::Wry>,
+    quit: MenuItem<tauri::Wry>,
+}
+
+pub fn install(app: &tauri::AppHandle) -> tauri::Result<TrayMenu> {
     let label = |key: &str| message(&format!("gui.desktop.{key}"), &[]);
     let status = MenuItem::with_id(app, "status", "Drops Miner", false, None::<&str>)?;
     let status_separator = PredefinedMenuItem::separator(app)?;
@@ -230,15 +237,20 @@ pub fn install(app: &tauri::AppHandle) -> tauri::Result<MenuItem<tauri::Wry>> {
     app.state::<Desktop>()
         .tray_available
         .store(true, Ordering::SeqCst);
-    Ok(pause)
+    Ok(TrayMenu {
+        show,
+        pause,
+        updates: update,
+        quit,
+    })
 }
 
-pub fn observe(app: &tauri::AppHandle, pause: Option<MenuItem<tauri::Wry>>) {
+pub fn observe(app: &tauri::AppHandle, menu: Option<TrayMenu>) {
     let app = app.clone();
     app.clone().state::<Desktop>().spawn(async move {
         let state = app.state::<Desktop>();
         let Ok(core) = state.application().await else {
-            if let Some(pause) = pause { let _ = pause.set_enabled(false); }
+            if let Some(menu) = menu { let _ = menu.pause.set_enabled(false); }
             return;
         };
         let mut changes = core.snapshot.subscribe();
@@ -255,14 +267,19 @@ pub fn observe(app: &tauri::AppHandle, pause: Option<MenuItem<tauri::Wry>>) {
                 changed
             });
             drop(snapshot);
-            if let Some(pause) = &pause {
-                let _ = pause.set_text(message(if paused { "gui.desktop.resume" } else { "gui.desktop.pause" }, &[]));
+            if let Some(menu) = &menu {
+                let language = core.settings.read().await.language;
+                let text = |key: &str| message_in(language, &format!("gui.desktop.{key}"), &[]);
+                let _ = menu.show.set_text(text("show"));
+                let _ = menu.pause.set_text(text(if paused { "resume" } else { "pause" }));
+                let _ = menu.updates.set_text(text("check_updates"));
+                let _ = menu.quit.set_text(text("quit"));
             }
             tokio::select! {
                 biased;
                 _ = state.cancel.cancelled() => break,
                 _ = core.shutdown.cancelled() => {
-                    if let Some(pause) = &pause { let _ = pause.set_enabled(false); }
+                    if let Some(menu) = &menu { let _ = menu.pause.set_enabled(false); }
                     break;
                 },
                 _ = state.preferences_changed.notified() => {},

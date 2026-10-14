@@ -22,7 +22,9 @@ the alternate agent instruction files; do not recreate copies or links.
 - Add backend unit/regression tests; cover frontend changes where practical. Update this
   harness when behavior/architecture changes. Update README only when setup, essential usage,
   updates or troubleshooting change; a new feature alone does not require more README text.
-  Update English messages for UI or console changes. There are no other locales or language settings.
+  Update English and Russian messages for UI or console changes. Supported dashboard
+  languages are English (`en`, default) and Russian (`ru`), selected by the saved
+  `language` setting; keep both catalogs in sync.
 - Keep user guidance in README and contributor policy in CONTRIBUTING. Do not create
   `docs/`, `plans/` or repository planning documents.
 - GitHub release publication uses the repository owner's scoped `prod` `RELEASE_TOKEN`;
@@ -59,7 +61,7 @@ Do not add forwarding hierarchies or speculative traits with one implementation.
 | `store/records.rs` | Frozen version-one archive/journal records, independent of runtime presentation fields |
 | `web/` | Axum HTTP, Socketioxide, protected snapshots and embedded frontend |
 | `fixture.rs`, `bin/dashboard-fixture.rs` | Feature-gated offline browser fixture |
-| `frontend/`, `lang/English.json` | React/TypeScript/Tailwind and one message catalog |
+| `frontend/`, `lang/English.json`, `lang/Russian.json` | React/TypeScript/Tailwind and two message catalogs |
 
 The domain/application/storage/Twitch modules below live in `crates/core/src/`; web and
 dashboard authentication remain in the root server package. Workspace package metadata owns

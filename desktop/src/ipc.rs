@@ -7,8 +7,9 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use twitch_drops_miner_core::{
     app::{
-        AppError, Application, Command, ENGLISH,
+        AppError, Application, Command,
         api::{ChannelSelection, HistoryQuery},
+        catalog,
         commands::{ChannelQuery, GameQuery},
         projection::StatePatch,
     },
@@ -96,8 +97,9 @@ impl Request {
         }
         match self {
             Self::AuthStatus => {
+                let language = app.settings.read().await.language;
                 return Ok(
-                    json!({"enabled":false,"authenticated":true,"translations":ENGLISH["gui"]["auth"]}),
+                    json!({"enabled":false,"authenticated":true,"translations":catalog(language)["gui"]["auth"]}),
                 );
             }
             Self::Telegram => return Ok(json!(app.telegram.view())),

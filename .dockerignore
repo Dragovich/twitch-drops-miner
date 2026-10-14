@@ -13,6 +13,7 @@
 desktop/gen/
 !lang/
 !lang/English.json
+!lang/Russian.json
 !frontend/
 !frontend/**
 frontend/node_modules/

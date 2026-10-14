@@ -7,7 +7,6 @@ use serde_json::{Value, json};
 use super::{
     AppError, Application, Command,
     commands::{ChannelQuery, DirectoryRequest, GameQuery},
-    message,
 };
 use crate::{config::GameMetadata, dto::SettingsView, store::HistoryFilter};
 
@@ -194,7 +193,9 @@ impl Application {
     pub async fn verify_proxy(&self, proxy: &str) -> Result<Value, AppError> {
         crate::config::validate_proxy(proxy).map_err(|_| AppError::InvalidRequest)?;
         if proxy.is_empty() {
-            return Ok(json!({"success":false,"message":message("gui.backend.proxy_empty",&[])}));
+            return Ok(
+                json!({"success":false,"message":self.text("gui.backend.proxy_empty",&[]).await}),
+            );
         }
         let started = std::time::Instant::now();
         let client = reqwest::Client::builder()
@@ -210,9 +211,9 @@ impl Application {
         };
         Ok(match response {
             Ok(response) if response.status().as_u16() < 500 => {
-                json!({"success":true,"latency":started.elapsed().as_millis(),"message":message("gui.backend.proxy_connected",&[])})
+                json!({"success":true,"latency":started.elapsed().as_millis(),"message":self.text("gui.backend.proxy_connected",&[]).await})
             }
-            _ => json!({"success":false,"message":message("gui.backend.proxy_failed",&[])}),
+            _ => json!({"success":false,"message":self.text("gui.backend.proxy_failed",&[]).await}),
         })
     }
 }

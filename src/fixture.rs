@@ -260,7 +260,7 @@ async fn commands(app: Arc<App>, mut receiver: mpsc::Receiver<CommandRequest>) {
             Command::MineChannel(login, duration) => {
                 let mode = if login == "missing" {
                     ManualMode {
-                        error: Some(crate::web::message("gui.channels.not_found", &[])),
+                        error: Some(app.text("gui.channels.not_found", &[]).await),
                         ..ManualMode::default()
                     }
                 } else {

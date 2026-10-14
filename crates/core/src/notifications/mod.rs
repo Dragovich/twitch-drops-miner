@@ -19,7 +19,9 @@ use crate::{
     app::{
         Application, Notification,
         activity::{ActivityEvent, Category, Severity},
+        message_in,
     },
+    config::Language,
     random_hex,
     store::{atomic_json, read_json},
 };
@@ -134,11 +136,13 @@ pub struct Claim {
 }
 
 impl Claim {
-    fn message(&self) -> String {
+    fn message(&self, language: Language) -> String {
         format!(
-            "Drop claimed\n<b>{}</b> — {}\nReward: <b>{}</b>",
+            "{}\n<b>{}</b> — {}\n{}: <b>{}</b>",
+            message_in(language, "telegram.claim_title", &[]),
             html(&self.game),
             html(&self.campaign),
+            message_in(language, "telegram.claim_reward", &[]),
             html(&self.reward)
         )
     }
@@ -594,8 +598,11 @@ async fn run_claims(app: Arc<Application>, mut events: broadcast::Receiver<Notif
         if seen.len() > 1024 {
             seen.pop_front();
         }
-        let proxy = app.settings.read().await.proxy.clone();
-        let text = claim.message();
+        let settings = app.settings.read().await;
+        let proxy = settings.proxy.clone();
+        let language = settings.language;
+        drop(settings);
+        let text = claim.message(language);
         let result = app
             .telegram
             .send(
@@ -612,7 +619,8 @@ async fn run_claims(app: Arc<Application>, mut events: broadcast::Receiver<Notif
 }
 
 async fn report(app: &Application, result: Result<(), Error>) {
-    let event = ActivityEvent::new(
+    let event = ActivityEvent::new_in(
+        app.settings.read().await.language,
         "gui.backend.telegram_delivery_failed",
         Category::Connection,
         Severity::Warning,

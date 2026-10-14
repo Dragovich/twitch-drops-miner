@@ -1,7 +1,28 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import english from '../../../../lang/English.json';
+import russian from '../../../../lang/Russian.json';
 type Dictionary = { [key: string]: string | string[] | Dictionary };
+export type Language = 'en' | 'ru';
 type Translate = (key: string, parameters?: Record<string, string | number>) => string;
+const dictionaries: Record<Language, Dictionary> = { en: english, ru: russian };
+const storageKey = 'tdm-language';
+export function resolveLanguage(value: unknown): Language {
+  return value === 'ru' ? 'ru' : 'en';
+}
+export function storedLanguage(): Language {
+  try {
+    return resolveLanguage(localStorage.getItem(storageKey));
+  } catch {
+    return 'en';
+  }
+}
+export function storeLanguage(language: Language) {
+  try {
+    localStorage.setItem(storageKey, language);
+  } catch {
+    /* Storage can be disabled. */
+  }
+}
 function lookup(dictionary: Dictionary, key: string): string | undefined {
   let value: string | string[] | Dictionary | undefined = dictionary;
   for (const part of key.split('.'))
@@ -26,7 +47,31 @@ export function translator(dictionary: Dictionary): Translate {
   };
 }
 const Context = createContext<Translate>(translator(english));
-export function I18n({ messages, children }: { messages?: Dictionary; children: ReactNode }) {
-  return <Context value={translator(messages ?? english)}>{children}</Context>;
+export function I18n({
+  messages,
+  language = 'en',
+  children,
+}: {
+  messages?: Dictionary;
+  language?: Language;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+  const base = dictionaries[language];
+  let dictionary = base;
+  const auth =
+    messages?.gui && typeof messages.gui === 'object' && !Array.isArray(messages.gui)
+      ? messages.gui.auth
+      : undefined;
+  if (auth && typeof auth === 'object' && !Array.isArray(auth)) {
+    const gui = base.gui;
+    dictionary = {
+      ...base,
+      gui: { ...(typeof gui === 'object' && !Array.isArray(gui) ? gui : {}), auth },
+    };
+  }
+  return <Context value={translator(dictionary)}>{children}</Context>;
 }
 export const useT = () => useContext(Context);

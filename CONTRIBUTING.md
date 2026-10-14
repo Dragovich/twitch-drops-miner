@@ -49,7 +49,7 @@ must use mocked transports and temporary storage. Never reuse a live miner for t
 | `crates/core/src/store.rs`, `crates/core/src/store/records.rs`, `crates/core/src/config.rs`, `src/auth.rs`, `src/origin.rs` | Compatible durable records, settings and security |
 | `src/web/`, `crates/core/src/dto.rs` | Axum/Socket.IO dashboard boundary |
 | `src/fixture.rs`, `src/bin/dashboard-fixture.rs` | Offline browser fixture |
-| `frontend/src/app/`, `frontend/src/features/`, `frontend/src/shared/`, `lang/English.json` | Dashboard shell/provider, product features, shared controls and English messages |
+| `frontend/src/app/`, `frontend/src/features/`, `frontend/src/shared/`, `lang/English.json`, `lang/Russian.json` | Dashboard shell/provider, product features, shared controls and messages |
 | `.github/` | Validation and release automation |
 
 Use concrete Rust structs with methods/composition and shared policies; keep business
@@ -58,7 +58,7 @@ credential redaction and atomic disk-before-memory updates. Consult [AGENTS.md](
 for detailed domain, security and UI contracts.
 
 Edit frontend sources, never generated `web/`. Update AGENTS for behavior/architecture changes
-and English messages when UI/console text changes. Render translations as React text with
+and English and Russian messages when UI/console text changes. Render translations as React text with
 validated links. Commit dependency lockfiles and avoid unrelated upgrades. Cargo owns
 version/lock consistency; Vite owns asset hashes.
 

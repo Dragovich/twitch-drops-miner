@@ -54,7 +54,7 @@ impl Mining {
         });
     }
 
-    pub(super) fn apply_manual(&mut self, intent: &Intent) {
+    pub(super) fn apply_manual(&mut self, intent: &Intent, language: crate::config::Language) {
         if intent.manual_revision != self.seen.manual_revision
             && let Some(login) = &intent.channel_login
         {
@@ -78,7 +78,11 @@ impl Mining {
             });
             self.seen.manual_revision = intent.manual_revision;
             if intent.selected.is_some() && self.manual.is_none() {
-                self.manual_error = Some(message("gui.channels.not_found", &[]));
+                self.manual_error = Some(crate::app::message_in(
+                    language,
+                    "gui.channels.not_found",
+                    &[],
+                ));
             }
             self.publish = true;
         }
@@ -309,7 +313,9 @@ impl Mining {
             } else {
                 "status.resumed"
             };
-            self.app.status(message(key, &[])).await;
+            self.app
+                .status(crate::app::message_in(settings.language, key, &[]))
+                .await;
             self.app.activity(key, &[]).await;
         }
         if self
@@ -354,9 +360,14 @@ impl Mining {
             if !settings.mining_paused
                 && let Some(channel) = self.channels.iter().find(|c| Some(c.identity.id) == next)
             {
-                let status = message("status.watching", &[("channel", &channel.identity.name)]);
+                let status = crate::app::message_in(
+                    settings.language,
+                    "status.watching",
+                    &[("channel", &channel.identity.name)],
+                );
                 self.app.status(status.clone()).await;
-                let mut event = crate::app::activity::ActivityEvent::new(
+                let mut event = crate::app::activity::ActivityEvent::new_in(
+                    settings.language,
                     "status.watching",
                     crate::app::activity::Category::Mining,
                     crate::app::activity::Severity::Info,

@@ -281,14 +281,14 @@ pub fn run() {
                         let _ = (window, event);
                     })
                     .build()?;
-            let pause = match shell::install(app.handle()) {
-                Ok(pause) => Some(pause),
+            let menu = match shell::install(app.handle()) {
+                Ok(menu) => Some(menu),
                 Err(_) => {
                     tracing::warn!("Tray icon unavailable; keeping the window accessible");
                     None
                 }
             };
-            shell::observe(app.handle(), pause);
+            shell::observe(app.handle(), menu);
             let state = app.state::<Desktop>();
             if !start_minimized
                 || !state.tray_available.load(Ordering::SeqCst)

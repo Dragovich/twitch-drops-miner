@@ -3,7 +3,7 @@ pub mod socket;
 #[cfg(test)]
 mod tests;
 
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use axum::{
@@ -31,8 +31,9 @@ use crate::{
 use socket::SocketHub;
 
 use crate::app::{
-    AppError, Application, ENGLISH,
+    AppError, Application,
     api::{ChannelSelection, HistoryQuery},
+    catalog,
 };
 pub use crate::app::{Command, CommandRequest, message};
 
@@ -355,10 +356,25 @@ async fn document<T: serde::de::DeserializeOwned>(request: Request) -> Result<T,
     serde_json::from_slice(&bytes).map_err(|_| ApiError::invalid())
 }
 
-async fn auth_status(State(app): State<Arc<App>>, headers: HeaderMap) -> Json<Value> {
+async fn auth_status(
+    State(app): State<Arc<App>>,
+    Query(query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> Json<Value> {
+    // An explicit choice wins; otherwise the browser language localizes the login screen.
+    let language = query
+        .get("lang")
+        .map(|code| crate::config::Language::from_code(code))
+        .unwrap_or_else(|| {
+            headers
+                .get(header::ACCEPT_LANGUAGE)
+                .and_then(|value| value.to_str().ok())
+                .map(crate::config::Language::from_accept_language)
+                .unwrap_or_default()
+        });
     let state = app.auth.state.lock().await;
     Json(
-        json!({"enabled":state.enabled(),"authenticated":state.allowed(&token_from_headers(&headers),unix_now()),"translations":ENGLISH["gui"]["auth"]}),
+        json!({"enabled":state.enabled(),"authenticated":state.allowed(&token_from_headers(&headers),unix_now()),"translations":catalog(language)["gui"]["auth"]}),
     )
 }
 
@@ -503,7 +519,7 @@ async fn verify_proxy(
     crate::config::validate_proxy(&proxy).map_err(|_| ApiError::invalid())?;
     if proxy.is_empty() {
         return Ok(Json(
-            json!({"success":false,"message":message("gui.backend.proxy_empty",&[])}),
+            json!({"success":false,"message":app.application.text("gui.backend.proxy_empty",&[]).await}),
         ));
     }
     #[cfg(feature = "dashboard-fixture")]

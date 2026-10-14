@@ -3,8 +3,9 @@ use crate::{
     app::{
         AppError, Application,
         activity::{ActivityEvent, Category, Severity},
-        message,
+        message_in,
     },
+    config::Language,
     dto::{MiningState, Snapshot},
 };
 use chrono::Utc;
@@ -60,8 +61,8 @@ impl Cursor {
     }
 }
 
-fn text(key: &str, args: &[(&str, &str)]) -> String {
-    message(&format!("telegram.{key}"), args)
+fn text(language: Language, key: &str, args: &[(&str, &str)]) -> String {
+    message_in(language, &format!("telegram.{key}"), args)
 }
 
 fn command(update: &Value, owner: i64, started: i64, now: i64) -> Option<Command> {
@@ -107,6 +108,7 @@ fn command(update: &Value, owner: i64, started: i64, now: i64) -> Option<Command
 }
 
 fn status(snapshot: &Snapshot) -> String {
+    let language = snapshot.settings.values.language;
     let state = if snapshot.login.user_id.is_none() {
         "account_required"
     } else if snapshot.settings.values.mining_paused {
@@ -128,14 +130,18 @@ fn status(snapshot: &Snapshot) -> String {
         }
     };
     let label = if state == "watching" {
-        text("watching", &[])
+        text(language, "watching", &[])
     } else {
-        message(&format!("gui.redesign.mining_state_{state}"), &[])
+        message_in(language, &format!("gui.redesign.mining_state_{state}"), &[])
     };
     let mut lines = vec![html(&label)];
     if snapshot.login.user_id.is_some() {
         if let Some(channel) = snapshot.channels.iter().find(|c| c.watching) {
-            lines.push(text("channel", &[("channel", &html(&channel.name))]));
+            lines.push(text(
+                language,
+                "channel",
+                &[("channel", &html(&channel.name))],
+            ));
         }
         if let Some(drop) = &snapshot.current_drop {
             lines.push(format!(
@@ -145,6 +151,7 @@ fn status(snapshot: &Snapshot) -> String {
             ));
             lines.push(if drop.confirmed_at.is_some() {
                 text(
+                    language,
                     "progress",
                     &[
                         ("current", &drop.confirmed_minutes.to_string()),
@@ -152,11 +159,11 @@ fn status(snapshot: &Snapshot) -> String {
                     ],
                 )
             } else {
-                text("progress_unknown", &[])
+                text(language, "progress_unknown", &[])
             });
         }
         if snapshot.manual_mode.active || snapshot.manual_mode.pending_channel.is_some() {
-            lines.push(text("manual", &[]));
+            lines.push(text(language, "manual", &[]));
         }
     }
     lines.join("\n")
@@ -221,19 +228,21 @@ impl Session {
                 return Err(Error::Cancelled.into());
             }
             let snapshot = app.snapshot.read().await;
+            let language = snapshot.settings.values.language;
             match command {
-                Command::Help => return Ok(text("help", &[])),
+                Command::Help => return Ok(text(language, "help", &[])),
                 Command::Status => return Ok(status(&snapshot)),
                 _ => {}
             }
             if snapshot.login.user_id.is_none() {
-                return Ok(text("login_required", &[]));
+                return Ok(text(language, "login_required", &[]));
             }
             let mut patch = json!({"revision":snapshot.settings.revision});
             let reply = match command {
                 Command::Pause | Command::Resume => {
                     patch["mining_paused"] = json!(command == Command::Pause);
                     text(
+                        language,
                         if command == Command::Pause {
                             "paused"
                         } else {
@@ -258,14 +267,14 @@ impl Session {
                         )
                         .find(|game| crate::config::fold(game) == key)
                     else {
-                        return Ok(text("unknown_game", &[]));
+                        return Ok(text(language, "unknown_game", &[]));
                     };
                     let mut games = snapshot.settings.values.games_to_watch.clone();
                     if !games.iter().any(|g| crate::config::fold(g) == key) {
                         games.push(game.clone());
                     }
                     patch["games_to_watch"] = json!(games);
-                    text("selected", &[("game", &html(game))])
+                    text(language, "selected", &[("game", &html(game))])
                 }
                 _ => unreachable!(),
             };
@@ -315,7 +324,8 @@ impl Session {
                     // Skip the blocked queue when a later update arrives; never parse/execute a partial body.
                     tail |= failure == Failure::Oversized;
                     let conflict = failure == Failure::Conflict;
-                    app.record_activity(event(conflict)).await;
+                    let language = app.settings.read().await.language;
+                    app.record_activity(event(language, conflict)).await;
                     let seconds = match failure {
                         Failure::RateLimited(delay) => delay,
                         Failure::Conflict => 60,
@@ -328,8 +338,9 @@ impl Session {
                 }
                 Ok(updates) => {
                     tail = false;
-                    app.recover_activity(&event(false)).await;
-                    app.recover_activity(&event(true)).await;
+                    let language = app.settings.read().await.language;
+                    app.recover_activity(&event(language, false)).await;
+                    app.recover_activity(&event(language, true)).await;
                     for update in updates {
                         if !cursor.advance(&update, Utc::now().timestamp()) {
                             continue;
@@ -347,8 +358,10 @@ impl Session {
                         let reply = match self.execute(app, command).await {
                             Ok(reply) => reply,
                             Err(AppError::Telegram(Error::Cancelled)) => return,
-                            Err(AppError::SettingsConflict) => text("conflict", &[]),
-                            Err(_) => text("failed", &[]),
+                            Err(AppError::SettingsConflict) => {
+                                text(app.settings.read().await.language, "conflict", &[])
+                            }
+                            Err(_) => text(app.settings.read().await.language, "failed", &[]),
                         };
                         let proxy = app.settings.read().await.proxy.clone();
                         let sent = app
@@ -366,8 +379,9 @@ impl Session {
                     }
                     if bootstrap {
                         cursor.offset.get_or_insert(0);
+                        let language = app.settings.read().await.language;
                         let commands: Vec<_> = ["status", "pause", "resume", "mine", "help"].into_iter()
-                            .map(|command| json!({"command":command, "description":text(&format!("menu_{command}"), &[])})).collect();
+                            .map(|command| json!({"command":command, "description":text(language, &format!("menu_{command}"), &[])})).collect();
                         // A missing menu does not disable typed commands, or replace another chat's menu.
                         let _ = self.api(app, "setMyCommands", json!({"scope":{"type":"chat", "chat_id":self.config.chat_id}, "commands":commands})).await;
                     }
@@ -388,8 +402,9 @@ impl Session {
     }
 }
 
-fn event(conflict: bool) -> ActivityEvent {
-    ActivityEvent::new(
+fn event(language: Language, conflict: bool) -> ActivityEvent {
+    ActivityEvent::new_in(
+        language,
         if conflict {
             "gui.backend.telegram_controls_conflict"
         } else {

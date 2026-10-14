@@ -25,7 +25,7 @@ import {
 } from '@mdi/js';
 import type { AuthStatus } from '../shared/lib/types';
 import { request } from '../shared/lib/api';
-import { I18n, useT } from '../shared/lib/i18n';
+import { I18n, storedLanguage, useT } from '../shared/lib/i18n';
 import { MinerProvider, useMiner } from './MinerProvider';
 import { miningTitle } from './title';
 import { Button, Empty, Notice, IconButton } from '../shared/ui/index';
@@ -227,13 +227,16 @@ function Shell({ auth, onLogout }: { auth: AuthStatus; onLogout: () => Promise<v
     </div>
   );
 }
+function BootSplash() {
+  const t = useT();
+  return <Empty title={t('loading')} />;
+}
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [error, setError] = useState(false);
   const navigate = useNavigate();
-  const t = useT();
   async function refresh() {
-    const state = await request<AuthStatus>('/api/auth/status');
+    const state = await request<AuthStatus>(`/api/auth/status?lang=${storedLanguage()}`);
     setAuth(state);
     setError(false);
     if (state.authenticated && location.pathname === '/login') navigate('/', { replace: true });
@@ -255,11 +258,20 @@ export default function App() {
     };
   }, []);
   if (!auth && error)
-    return isDesktop() ? <DesktopStartupError /> : <Login onLogin={refresh} statusError />;
-  if (!auth) return <Empty title={t('loading')} />;
+    return (
+      <I18n language={storedLanguage()}>
+        {isDesktop() ? <DesktopStartupError /> : <Login onLogin={refresh} statusError />}
+      </I18n>
+    );
+  if (!auth)
+    return (
+      <I18n language={storedLanguage()}>
+        <BootSplash />
+      </I18n>
+    );
   if (!auth.authenticated)
     return (
-      <I18n messages={{ gui: { auth: auth.translations ?? {} } }}>
+      <I18n messages={{ gui: { auth: auth.translations ?? {} } }} language={storedLanguage()}>
         <Login onLogin={refresh} />
       </I18n>
     );

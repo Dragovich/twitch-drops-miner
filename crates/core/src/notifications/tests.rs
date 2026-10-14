@@ -686,15 +686,19 @@ fn claim_message_escapes_names_and_bounds_them_before_formatting() {
         epoch: 0,
     };
     assert_eq!(
-        claim.message(),
+        claim.message(crate::config::Language::En),
         "Drop claimed\n<b>Shakes &amp; Fidget</b> \u{2014} &lt;Campaign&gt; &amp;amp;\nReward: <b>&lt;/b&gt;\u{1f3c6}&lt;b&gt;</b>"
+    );
+    assert_eq!(
+        claim.message(crate::config::Language::Ru),
+        "Дроп получен\n<b>Shakes &amp; Fidget</b> \u{2014} &lt;Campaign&gt; &amp;amp;\nНаграда: <b>&lt;/b&gt;\u{1f3c6}&lt;b&gt;</b>"
     );
 
     claim.game = "\u{1f3c6}".repeat(2000);
     claim.campaign = "<".repeat(2000);
     claim.reward = "&".repeat(2000);
     assert_eq!(
-        claim.message(),
+        claim.message(crate::config::Language::En),
         format!(
             "Drop claimed\n<b>{}</b> \u{2014} {}\nReward: <b>{}</b>",
             "\u{1f3c6}".repeat(480),
